@@ -347,13 +347,29 @@ button {
 }
 
 .role-toggle {
-  text-align: left;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
   background: var(--bg-alt);
   border: 1px solid var(--card-border);
   border-radius: 10px;
-  padding: 12px;
-  cursor: pointer;
+  padding: 10px;
   color: var(--text);
+}
+
+.role-toggle-main {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  color: inherit;
+}
+
+.role-toggle-main:disabled {
+  cursor: default;
 }
 
 .role-toggle p {
@@ -365,6 +381,36 @@ button {
 .role-toggle.active {
   border-color: var(--gold);
   box-shadow: 0 0 0 1px var(--gold) inset;
+}
+
+.vote-pill {
+  align-self: center;
+  flex-shrink: 0;
+  background: var(--bg);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  height: fit-content;
+}
+
+.vote-pill-active {
+  border-color: var(--good);
+  color: var(--good);
+  background: var(--good-bg);
+}
+
+.btn-tiny {
+  padding: 3px 8px;
+  font-size: 0.65rem;
+  margin-left: auto;
+}
+
+.team-chip-neutral {
+  background: var(--card-border);
+  color: var(--text-dim);
 }
 
 .role-toggle-head {
@@ -505,6 +551,22 @@ button {
 .reject-pip-hit {
   background: var(--evil);
   border-color: var(--evil);
+}
+
+.extension-strip {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.extension-badge {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  background: var(--bg-alt);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  padding: 4px 12px;
 }
 
 .phase-panel {

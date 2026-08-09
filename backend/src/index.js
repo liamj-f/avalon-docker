@@ -7,7 +7,8 @@ const { Server } = require('socket.io');
 
 const { waitForDb, runMigrations } = require('./db');
 const { RoomManager } = require('./rooms');
-const { attachSocketHandlers } = require('./socketHandlers');
+const { attachSocketHandlers, broadcastRoom } = require('./socketHandlers');
+const { attachGameListener } = require('./gameNotify');
 
 const PORT = process.env.PORT || 4000;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
@@ -39,6 +40,15 @@ async function main() {
   });
 
   attachSocketHandlers(io, roomManager);
+
+  // Bridges Postgres back to the sockets: any stored procedure that mutates
+  // a game ends with pg_notify(...), whether it was called by the app or by
+  // hand from psql, and this pushes the resulting state to everyone in that
+  // game's room.
+  attachGameListener(async (gameId) => {
+    const room = roomManager.findRoomByGameId(gameId);
+    if (room) await broadcastRoom(io, room);
+  });
 
   setInterval(() => roomManager.reapEmptyRooms(), 1000 * 60 * 30);
 

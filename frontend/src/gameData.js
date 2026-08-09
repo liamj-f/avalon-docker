@@ -57,6 +57,23 @@ export const ROLE_TOGGLES = [
   },
 ];
 
+// Game-flow modifiers rather than characters — they don't take up a
+// good/evil slot, so they're shown as a separate section in the lobby.
+export const EXTENSION_TOGGLES = [
+  {
+    key: 'ladyOfLake',
+    name: 'Lady of the Lake',
+    description:
+      'After missions 2, 3 and 4, the current holder secretly checks one other player’s loyalty, then passes the token to them. Can go to anyone, Good or Evil.',
+  },
+  {
+    key: 'excalibur',
+    name: 'Excalibur',
+    description:
+      'A Good player starts holding the sword. Once per game, if a mission they’re not necessarily on comes back with at least one Fail, they may use Excalibur to cleanse one Fail into a Success.',
+  },
+];
+
 export function validateSettingsClient(playerCount, settings) {
   const errors = [];
   const cfg = MISSION_CONFIG[playerCount];

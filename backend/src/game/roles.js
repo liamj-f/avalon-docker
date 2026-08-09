@@ -99,6 +99,10 @@ function defaultSettings() {
     oberon: false,
     assassin: true,
     tristanIseult: false,
+    // Extensions — game-flow modifiers rather than characters, so they
+    // don't consume a good/evil slot the way the roles above do.
+    ladyOfLake: false,
+    excalibur: false,
   };
 }
 

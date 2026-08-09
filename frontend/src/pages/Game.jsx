@@ -5,6 +5,8 @@ import TeamBuilder from '../components/TeamBuilder.jsx';
 import VotePanel from '../components/VotePanel.jsx';
 import MissionPanel from '../components/MissionPanel.jsx';
 import AssassinPanel from '../components/AssassinPanel.jsx';
+import LadyOfLakePanel from '../components/LadyOfLakePanel.jsx';
+import ExcaliburPanel from '../components/ExcaliburPanel.jsx';
 import EndScreen from '../components/EndScreen.jsx';
 import RoleCard from '../components/RoleCard.jsx';
 import Chat from '../components/Chat.jsx';
@@ -13,20 +15,33 @@ const PHASE_LABEL = {
   team_building: 'Team Building',
   team_voting: 'Team Vote',
   mission: 'Mission',
+  lady_of_lake: 'Lady of the Lake',
+  excalibur_decision: 'Excalibur',
   assassination: 'Assassination',
   game_over: 'Game Over',
 };
 
 export default function Game() {
-  const { state, proposeTeam, submitTeamVote, submitMissionVote, submitAssassination } = useGame();
+  const {
+    state,
+    proposeTeam,
+    submitTeamVote,
+    submitMissionVote,
+    submitAssassination,
+    useLadyOfLake,
+    submitExcaliburDecision,
+  } = useGame();
   const { room } = state;
   const { game } = room;
 
   // room.you carries identity (name/host/token); game.you carries the
-  // in-game secret (role/team/knowledge). Merge them so child components
-  // have one consistent "you" to read from.
+  // in-game secret (role/team/knowledge/etc). Merge them so child
+  // components have one consistent "you" to read from.
   const you = { ...room.you, ...(game.you || {}) };
   const viewRoom = { ...room, you };
+
+  const ladyHolder = game.hasLadyOfLake && findPlayer(room.players, game.ladyHolderSeat);
+  const excaliburHolder = game.hasExcalibur && findPlayer(room.players, game.excaliburHolderSeat);
 
   return (
     <div className="game-layout">
@@ -39,12 +54,31 @@ export default function Game() {
             <span className="hint">Mission {Math.min(game.missionNumber + 1, 5)} of 5</span>
           </div>
           <MissionTrack game={game} />
+          {(ladyHolder || excaliburHolder) && (
+            <div className="extension-strip">
+              {ladyHolder && (
+                <span className="extension-badge">
+                  🌊 Lady of the Lake: <strong>{ladyHolder.displayName}</strong>
+                </span>
+              )}
+              {excaliburHolder && (
+                <span className="extension-badge">
+                  ⚔️ Excalibur: <strong>{excaliburHolder.displayName}</strong>
+                  {game.excaliburUsed && ' (spent)'}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="card">
           {game.phase === 'team_building' && <TeamBuilder room={viewRoom} onPropose={proposeTeam} />}
           {game.phase === 'team_voting' && <VotePanel room={viewRoom} onVote={submitTeamVote} />}
           {game.phase === 'mission' && <MissionPanel room={viewRoom} onPlayCard={submitMissionVote} />}
+          {game.phase === 'lady_of_lake' && <LadyOfLakePanel room={viewRoom} onUse={useLadyOfLake} />}
+          {game.phase === 'excalibur_decision' && (
+            <ExcaliburPanel room={viewRoom} onDecide={submitExcaliburDecision} />
+          )}
           {game.phase === 'assassination' && <AssassinPanel room={viewRoom} onAssassinate={submitAssassination} />}
           {game.phase === 'game_over' && <EndScreen room={viewRoom} />}
         </div>
@@ -55,4 +89,9 @@ export default function Game() {
       </div>
     </div>
   );
+}
+
+function findPlayer(players, seat) {
+  if (seat === null || seat === undefined) return null;
+  return players.find((p) => p.seat === seat) || null;
 }

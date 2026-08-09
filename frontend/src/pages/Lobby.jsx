@@ -1,11 +1,11 @@
 import React from 'react';
 import { useGame } from '../store.jsx';
-import { ROLE_TOGGLES, validateSettingsClient } from '../gameData.js';
+import { ROLE_TOGGLES, EXTENSION_TOGGLES, validateSettingsClient } from '../gameData.js';
 
 export default function Lobby() {
-  const { state, updateSettings, startGame, leaveRoom } = useGame();
+  const { state, updateSettings, startGame, leaveRoom, setRolePreference, transferHost } = useGame();
   const { room } = state;
-  const { you, players, settings, minPlayers, maxPlayers } = room;
+  const { you, players, settings, minPlayers, maxPlayers, rolePreferenceTally } = room;
 
   const errors = validateSettingsClient(players.length, settings);
   const notEnoughPlayers = players.length < minPlayers;
@@ -15,10 +15,39 @@ export default function Lobby() {
     navigator.clipboard?.writeText(room.code).catch(() => {});
   };
 
-  const toggle = (key) => {
+  const toggleSetting = (key) => {
     if (!you?.isHost) return;
     updateSettings({ [key]: !settings[key] });
   };
+
+  const toggleVote = (key) => {
+    const current = rolePreferenceTally[key];
+    setRolePreference(key, !current?.you);
+  };
+
+  const renderToggleGroup = (items) =>
+    items.map((r) => {
+      const tally = rolePreferenceTally[r.key] || { count: 0, you: false };
+      return (
+        <div key={r.key} className={`role-toggle role-toggle-${r.team || 'neutral'} ${settings[r.key] ? 'active' : ''}`}>
+          <button type="button" className="role-toggle-main" onClick={() => toggleSetting(r.key)} disabled={!you?.isHost}>
+            <div className="role-toggle-head">
+              <span>{r.name}</span>
+              {r.team && <span className={`team-chip team-chip-${r.team}`}>{r.team}</span>}
+            </div>
+            <p>{r.description}</p>
+          </button>
+          <button
+            type="button"
+            className={`vote-pill ${tally.you ? 'vote-pill-active' : ''}`}
+            onClick={() => toggleVote(r.key)}
+            title="Cast your non-binding preference vote — the host still decides"
+          >
+            👍 {tally.count}
+          </button>
+        </div>
+      );
+    });
 
   return (
     <div className="lobby-grid">
@@ -48,6 +77,11 @@ export default function Lobby() {
               {p.isHost && <span className="badge">Host</span>}
               {p.seat === you?.seat && <span className="badge badge-you">You</span>}
               {!p.connected && <span className="badge badge-warn">offline</span>}
+              {you?.isHost && p.seat !== you.seat && p.connected && (
+                <button type="button" className="btn btn-ghost btn-tiny" onClick={() => transferHost(p.seat)}>
+                  Make host
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -58,24 +92,16 @@ export default function Lobby() {
 
       <div className="card">
         <h2 className="section-title">Roles</h2>
-        <p className="hint">{you?.isHost ? 'Toggle which characters are in play.' : 'Only the host can change roles.'}</p>
-        <div className="role-toggle-grid">
-          {ROLE_TOGGLES.map((r) => (
-            <button
-              type="button"
-              key={r.key}
-              className={`role-toggle role-toggle-${r.team} ${settings[r.key] ? 'active' : ''}`}
-              onClick={() => toggle(r.key)}
-              disabled={!you?.isHost}
-            >
-              <div className="role-toggle-head">
-                <span>{r.name}</span>
-                <span className={`team-chip team-chip-${r.team}`}>{r.team}</span>
-              </div>
-              <p>{r.description}</p>
-            </button>
-          ))}
-        </div>
+        <p className="hint">
+          {you?.isHost ? 'Toggle which characters are in play.' : 'Only the host can change roles.'} Everyone can cast a
+          👍 preference vote — it&rsquo;s advisory, the host has final say.
+        </p>
+        <div className="role-toggle-grid">{renderToggleGroup(ROLE_TOGGLES)}</div>
+
+        <h2 className="section-title" style={{ marginTop: 20 }}>
+          Extensions
+        </h2>
+        <div className="role-toggle-grid">{renderToggleGroup(EXTENSION_TOGGLES)}</div>
 
         {errors.length > 0 && (
           <ul className="error-list">
@@ -88,11 +114,6 @@ export default function Lobby() {
         <button type="button" className="btn btn-primary btn-block" disabled={!canStart} onClick={startGame}>
           {you?.isHost ? 'Start Game' : 'Waiting for host…'}
         </button>
-
-        <p className="hint" style={{ marginTop: 12 }}>
-          Excalibur is planned as a future add-on (allows Good to inspect or override a mission vote mid-game) — not
-          yet implemented.
-        </p>
       </div>
     </div>
   );
