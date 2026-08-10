@@ -1,6 +1,10 @@
 name: Build and publish Docker images
 
-# Builds backend/ and frontend/ as separate images and pushes them to GHCR.
+# Builds backend/ and frontend/ as separate multi-arch (amd64 + arm64)
+# images and pushes them to GHCR as a single manifest list per tag, so
+# `docker pull` resolves the right image automatically on Raspberry Pi /
+# Apple Silicon / other arm64 hosts as well as amd64. QEMU emulates arm64
+# on the amd64 runner for the arm64 half of each build.
 # Pull requests build (to catch a broken Dockerfile) but never push, since a
 # fork's GITHUB_TOKEN can't write packages here anyway.
 
@@ -37,6 +41,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -79,7 +86,4 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
-          # Single-arch by default for fast, predictable builds. To also
-          # publish arm64 (e.g. for Raspberry Pi / Apple Silicon hosts), add
-          # a docker/setup-qemu-action@v3 step above and uncomment:
-          # platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64,linux/arm64

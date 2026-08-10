@@ -139,6 +139,33 @@ settings → Change visibility if you want them pullable without auth. To
 run from these instead of building locally, point `docker-compose.yml`'s
 `backend`/`frontend` services at `image: ghcr.io/...` instead of `build: ./...`.
 
+Both images are published **multi-arch** (`linux/amd64` + `linux/arm64`, via
+QEMU in the workflow) as a single manifest list per tag, so the same
+`ghcr.io/<owner>/<repo>/backend:latest` pulls the right variant automatically
+whether the host is a normal x86_64 server, a Raspberry Pi, or Apple
+Silicon — no separate `-arm64` tag to remember.
+
+### Using an existing Postgres instance
+
+By default `docker compose up` also starts its own `db` container with a
+Docker-managed volume. If you'd rather point the app at Postgres you
+already run elsewhere, use `docker-compose.external-db.yml` instead — it
+has no `db:` service at all, just `backend` + `frontend`:
+
+```bash
+cp .env.external-db.example .env
+# edit .env: DB_HOST, DB_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
+docker compose -f docker-compose.external-db.yml up --build
+```
+
+This expects, as a **prerequisite**, that the `POSTGRES_DB` database and the
+`POSTGRES_USER` service-account role already exist on that instance and
+that the role can log in with `POSTGRES_PASSWORD` and has `CREATE` on that
+database — the app never creates the database or role itself, only runs its
+own migrations (`backend/migrations/*.sql`, idempotent, tracked in
+`schema_migrations`) *inside* it on every boot, same as it does against the
+bundled `db` container.
+
 ## Local development (without Docker)
 
 ```bash
@@ -185,8 +212,9 @@ frontend/
                         # ExcaliburPanel, ArthurReveal, EndScreen, RoleCard, MissionTrack, Chat, PlayerAvatar
     store.jsx           # Socket.IO client + app state (React context)
 .github/workflows/
-  docker-publish.yml    # builds + pushes backend/frontend images to GHCR
+  docker-publish.yml    # builds + pushes multi-arch backend/frontend images to GHCR
 docker-compose.yml
+docker-compose.external-db.yml  # same app, no bundled `db` -- point it at Postgres you already run
 ```
 
 ## Rules reference (as implemented)
@@ -369,6 +397,14 @@ against a real local Postgres 16 and the real backend process (not mocks):
   after, across repeated runs.
 - Frontend: `npm run build` (Vite) completes cleanly, unmodified by the
   backend rewrite.
+- **Multi-arch publishing + the external-Postgres compose file**: the
+  workflow YAML parses and `docker compose -f docker-compose.external-db.yml
+  config` resolves correctly with `DB_HOST`/`POSTGRES_*` set (producing the
+  expected `DATABASE_URL`, no `db:` service, no stray `depends_on: db`) and
+  fails fast with a clear message when any of them are missing, both
+  confirmed directly; actually pushing a manifest list to GHCR and pulling
+  it on real arm64/amd64 hosts hasn't been (no registry egress in this
+  sandbox, same constraint as below).
 
 Worth a real `docker compose up --build` on your machine before you consider
 it done — the Dockerfiles are a standard `python:3.12-slim` + `pip install`
