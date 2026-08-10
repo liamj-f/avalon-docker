@@ -43,7 +43,7 @@ progress — not just a history log.
 Once a game starts, **Postgres holds the live state** — whose turn it is,
 the current phase, every team proposal, every vote, every mission card,
 who holds Lady of the Lake / Excalibur — and a set of PL/pgSQL **stored
-procedures** (`backend/migrations/003_stored_procedures.sql`) is the only
+procedures** (`backend/migrations/002_procedures.sql`) is the only
 thing allowed to mutate it. The backend's job shrinks to: call a stored
 procedure, then read the resulting rows back and push them to the right
 sockets. There's no separate in-memory "game engine" object — the database
@@ -67,14 +67,13 @@ SELECT sp_cast_team_vote('<game-id>', 2, true);
 
 This is genuinely how the app drives itself too — a player clicking
 "Approve" in the browser results in exactly this same function call. See
-`backend/migrations/003_stored_procedures.sql` (plus `005_lancelot_arthur_procedures.sql`,
-which layers Agravain/Arthur/Lancelot on top) for the full set
-(`sp_propose_team`, `sp_cast_team_vote`, `sp_cast_mission_card`,
-`sp_excalibur_decision`, `sp_use_lady_of_lake`, `sp_submit_assassination`,
-`sp_reveal_arthur`), and `mission_config`/`games`/`game_players`/`team_votes`/
-`mission_cards`/`lady_of_lake_events`/`excalibur_events` for the tables
-behind them — all fair game to `SELECT` from directly to see exactly what
-state a game is in.
+`backend/migrations/002_procedures.sql` for the full set (`sp_propose_team`,
+`sp_cast_team_vote`, `sp_cast_mission_card`, `sp_excalibur_decision`,
+`sp_use_lady_of_lake`, `sp_submit_assassination`, `sp_reveal_arthur`), and
+`backend/migrations/001_schema.sql` for the tables behind them —
+`mission_config`/`games`/`game_players`/`team_votes`/`mission_cards`/
+`lady_of_lake_events`/`excalibur_events` — all fair game to `SELECT` from
+directly to see exactly what state a game is in.
 
 **Security note:** this trades secrecy for transparency on purpose. Anyone
 with `psql` access can read every player's role and every vote directly out
@@ -149,11 +148,9 @@ backend/
     db.js                   # pg pool + migration runner
     index.js                 # entrypoint
   migrations/
-    001_init.sql              # base games/game_players/game_missions tables
-    002_gameplay_schema.sql    # live-state columns + team_votes/mission_cards/lady/excalibur tables
-    003_stored_procedures.sql   # the actual game engine, as PL/pgSQL
-    004_lancelot_arthur_schema.sql    # + revealed/reversed/swap columns
-    005_lancelot_arthur_procedures.sql # + Agravain/Arthur/Lancelot logic
+    001_schema.sql        # every table: games, game_players, game_missions, team_votes,
+                           # mission_cards, lady_of_lake_events, excalibur_events, mission_config
+    002_procedures.sql     # the actual game engine, as PL/pgSQL stored procedures
 frontend/
   src/
     pages/            # Home, Lobby, Game
@@ -254,7 +251,7 @@ this build picks one clean interpretation per mode and documents it:
   secretly at random when the game starts (`games.swap_mission_number`),
   the instant that mission resolves — win or lose — the two silently swap
   allegiance for the rest of the game (`_resolve_mission` in
-  `005_lancelot_arthur_procedures.sql`). Both appear to Merlin as Evil
+  `002_procedures.sql`). Both appear to Merlin as Evil
   regardless of their current, real team. Knowledge granted at deal time
   (who evil teammates see, etc.) is **not** retroactively recomputed after
   a swap — only `team`, which every live rule check reads fresh from
