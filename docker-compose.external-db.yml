@@ -1,0 +1,43 @@
+# Use this instead of docker-compose.yml when Postgres is already running
+# somewhere else (a managed instance, a shared box, another compose stack)
+# and you don't want this app to also spin up its own local `db` container.
+#
+#   docker compose -f docker-compose.external-db.yml up --build
+#
+# Prerequisites, on the existing Postgres instance:
+#   - The database named by POSTGRES_DB already exists (the app only ever
+#     runs its own migrations *inside* that database -- it never creates
+#     the database itself).
+#   - The role named by POSTGRES_USER already exists, can log in with
+#     POSTGRES_PASSWORD, and owns (or has CREATE on) that database, since
+#     the backend applies backend/migrations/*.sql on every boot (idempotent
+#     -- tracked in a schema_migrations table -- so this is safe to leave on
+#     every restart).
+#
+# Set DB_HOST/DB_PORT/POSTGRES_DB/POSTGRES_USER/POSTGRES_PASSWORD via a
+# .env file (see .env.external-db.example) or your shell/orchestrator's own
+# env-var mechanism. This file intentionally has no `db:` service and no
+# volume for one, since Postgres' data directory isn't this stack's to own
+# in this mode.
+
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgres://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@${DB_HOST:?set DB_HOST}:${DB_PORT:-5432}/${POSTGRES_DB:?set POSTGRES_DB}
+      CORS_ORIGIN: "*"
+      # The backend itself already retries the initial connection with
+      # backoff (see backend/src/db.py:wait_for_db), so no depends_on/
+      # healthcheck dance is needed here the way the bundled `db` service
+      # has one -- there's no local container whose startup we could order
+      # against anyway.
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - backend
