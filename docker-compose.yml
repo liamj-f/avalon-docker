@@ -15,7 +15,13 @@ services:
       retries: 10
 
   backend:
-    build: ./backend
+    # Pre-built by .github/workflows/docker-publish.yml on every push to
+    # main. Multi-arch (amd64 + arm64), so this resolves correctly on any
+    # host. Pin IMAGE_TAG (e.g. to a short commit SHA or a v*.*.* release)
+    # instead of always floating on :latest if you want reproducible
+    # deploys. To build from source instead, replace `image:` with
+    # `build: ./backend`.
+    image: ghcr.io/liamj-f/avalon-docker/backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       PORT: 4000
@@ -26,7 +32,7 @@ services:
         condition: service_healthy
 
   frontend:
-    build: ./frontend
+    image: ghcr.io/liamj-f/avalon-docker/frontend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-8080}:80"
