@@ -432,6 +432,11 @@ button {
   color: var(--good);
 }
 
+.team-chip-mixed {
+  background: linear-gradient(90deg, var(--good-bg) 50%, var(--evil-bg) 50%);
+  color: var(--gold-bright);
+}
+
 .team-chip-evil {
   background: var(--evil-bg);
   color: var(--evil);
@@ -551,6 +556,38 @@ button {
 .reject-pip-hit {
   background: var(--evil);
   border-color: var(--evil);
+}
+
+.arthur-reveal-box {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--gold);
+  border-radius: 10px;
+  background: rgba(217, 180, 100, 0.08);
+}
+
+.arthur-reveal-box .btn {
+  margin-top: 8px;
+}
+
+.public-reveal-strip,
+.swap-banner {
+  margin-top: 14px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+
+.public-reveal-strip {
+  background: var(--good-bg);
+  border: 1px solid var(--good);
+  color: var(--text);
+}
+
+.swap-banner {
+  background: var(--card-border);
+  border: 1px solid var(--gold);
+  color: var(--text);
 }
 
 .extension-strip {

@@ -9,6 +9,7 @@ import LadyOfLakePanel from '../components/LadyOfLakePanel.jsx';
 import ExcaliburPanel from '../components/ExcaliburPanel.jsx';
 import EndScreen from '../components/EndScreen.jsx';
 import RoleCard from '../components/RoleCard.jsx';
+import ArthurReveal from '../components/ArthurReveal.jsx';
 import Chat from '../components/Chat.jsx';
 
 const PHASE_LABEL = {
@@ -28,6 +29,7 @@ export default function Game() {
     submitTeamVote,
     submitMissionVote,
     submitAssassination,
+    revealArthur,
     useLadyOfLake,
     submitExcaliburDecision,
   } = useGame();
@@ -69,6 +71,18 @@ export default function Game() {
               )}
             </div>
           )}
+          {game.lancelotsSwapped && (
+            <p className="swap-banner">🔀 The Lancelots have swapped allegiance — nobody knows who's who now.</p>
+          )}
+          {game.publicReveals.length > 0 && (
+            <p className="public-reveal-strip">
+              👑 Revealed:{' '}
+              {game.publicReveals
+                .map((r) => `${findPlayer(room.players, r.seat)?.displayName} (${r.role})`)
+                .join(', ')}
+            </p>
+          )}
+          <ArthurReveal game={game} you={you} onReveal={revealArthur} />
         </div>
 
         <div className="card">

@@ -78,6 +78,48 @@ const ROLES = {
     optional: true,
     description: 'If Good wins three missions, you get one shot at identifying Merlin. Guess correctly and Evil steals the win.',
   },
+  AGRAVAIN: {
+    id: 'AGRAVAIN',
+    name: 'Agravain',
+    team: 'evil',
+    optional: true,
+    description: 'A zealous Minion of Mordred — you must play Fail on every quest you’re sent on. No choice, no bluffing.',
+  },
+  ARTHUR: {
+    id: 'ARTHUR',
+    name: 'Arthur',
+    team: 'good',
+    optional: true,
+    description: 'Once two quests have failed, you may publicly reveal yourself as Arthur to rally Good — at the cost of painting a target on your back.',
+  },
+  LANCELOT: {
+    id: 'LANCELOT',
+    name: 'Lancelot',
+    team: 'good',
+    optional: true,
+    description: 'Appears to Merlin as Evil, a built-in red herring. Holds a single Reverse card — while on a quest, may play it instead of Success to flip that quest’s outcome. Incompatible with the Good & Evil Lancelot pair.',
+  },
+  LANCELOT_GOOD: {
+    id: 'LANCELOT_GOOD',
+    name: 'Lancelot',
+    team: 'good',
+    optional: true,
+    description: 'One of a pair of Lancelots. Appears to Merlin as Evil. At a random, secret point in the game the two Lancelots swap allegiance for the rest of the game.',
+  },
+  LANCELOT_EVIL: {
+    id: 'LANCELOT_EVIL',
+    name: 'Lancelot',
+    team: 'evil',
+    optional: true,
+    description: 'One of a pair of Lancelots. At a random, secret point in the game the two Lancelots swap allegiance for the rest of the game.',
+  },
+  GUINEVERE: {
+    id: 'GUINEVERE',
+    name: 'Guinevere',
+    team: 'good',
+    optional: true,
+    description: 'Knows the identities of both Lancelots, but never which one is currently Good or Evil. Requires the Good & Evil Lancelot pair.',
+  },
   MINION: {
     id: 'MINION',
     name: 'Minion of Mordred',
@@ -88,7 +130,9 @@ const ROLES = {
 };
 
 /** Roles the lobby UI can toggle on/off. Order matters for display. */
-const TOGGLEABLE_ROLES = ['MERLIN', 'PERCIVAL', 'MORGANA', 'MORDRED', 'OBERON', 'ASSASSIN', 'TRISTAN'];
+const TOGGLEABLE_ROLES = [
+  'MERLIN', 'PERCIVAL', 'MORGANA', 'MORDRED', 'OBERON', 'ASSASSIN', 'AGRAVAIN', 'ARTHUR', 'TRISTAN',
+];
 
 function defaultSettings() {
   return {
@@ -98,7 +142,12 @@ function defaultSettings() {
     mordred: false,
     oberon: false,
     assassin: true,
+    agravain: false,
+    arthur: false,
     tristanIseult: false,
+    lancelot: false,
+    lancelotPair: false,
+    guinevere: false,
     // Extensions — game-flow modifiers rather than characters, so they
     // don't consume a good/evil slot the way the roles above do.
     ladyOfLake: false,
@@ -119,6 +168,12 @@ function validateSettings(playerCount, settings) {
   if (settings.percival && !settings.merlin) errors.push('Percival requires Merlin to be in play.');
   if (settings.morgana && !settings.percival) errors.push('Morgana requires Percival to be in play (otherwise she has nothing to fool).');
   if (settings.mordred && !settings.merlin) errors.push('Mordred requires Merlin to be in play (otherwise there is nothing to hide from).');
+  if (settings.lancelot && !settings.merlin) errors.push('Lancelot requires Merlin to be in play (otherwise there is nothing to fool).');
+  if (settings.lancelotPair && !settings.merlin) errors.push('The Good & Evil Lancelot pair requires Merlin to be in play (otherwise there is nothing to fool).');
+  if (settings.guinevere && !settings.lancelotPair) errors.push('Guinevere requires the Good & Evil Lancelot pair to be in play.');
+  if (settings.lancelot && settings.lancelotPair) {
+    errors.push('Lancelot (solo) and the Good & Evil Lancelot pair cannot both be in play — pick one.');
+  }
 
   try {
     buildRoleList(playerCount, settings);
@@ -140,11 +195,17 @@ function buildRoleList(playerCount, settings) {
   if (settings.morgana) evilSpecial.push('MORGANA');
   if (settings.oberon) evilSpecial.push('OBERON');
   if (settings.assassin) evilSpecial.push('ASSASSIN');
+  if (settings.agravain) evilSpecial.push('AGRAVAIN');
+  if (settings.lancelotPair) evilSpecial.push('LANCELOT_EVIL');
 
   const goodSpecial = [];
   if (settings.tristanIseult) goodSpecial.push('TRISTAN', 'ISEULT');
   if (settings.merlin) goodSpecial.push('MERLIN');
   if (settings.percival) goodSpecial.push('PERCIVAL');
+  if (settings.arthur) goodSpecial.push('ARTHUR');
+  if (settings.lancelot) goodSpecial.push('LANCELOT');
+  if (settings.lancelotPair) goodSpecial.push('LANCELOT_GOOD');
+  if (settings.guinevere) goodSpecial.push('GUINEVERE');
 
   if (evilSpecial.length > cfg.evil) {
     throw new GameError(
@@ -198,13 +259,24 @@ function computeKnowledge(assignments) {
   const percival = assignments.find((a) => a.roleId === 'PERCIVAL');
   const tristan = assignments.find((a) => a.roleId === 'TRISTAN');
   const iseult = assignments.find((a) => a.roleId === 'ISEULT');
+  const guinevere = assignments.find((a) => a.roleId === 'GUINEVERE');
+  const lancelotGood = assignments.find((a) => a.roleId === 'LANCELOT_GOOD');
+  const lancelotEvil = assignments.find((a) => a.roleId === 'LANCELOT_EVIL');
   const evilNonOberon = assignments.filter((a) => a.team === 'evil' && a.roleId !== 'OBERON');
 
   if (merlin) {
-    const seenByMerlin = assignments.filter((a) => a.team === 'evil' && a.roleId !== 'MORDRED');
+    // Evil (minus Mordred) is Merlin's usual sight, but any Lancelot — solo
+    // or from the swapping pair — is a built-in red herring: Merlin sees
+    // them as Evil regardless of their true, current team.
+    const seenAsEvil = new Set(
+      assignments.filter((a) => a.team === 'evil' && a.roleId !== 'MORDRED').map((a) => a.seat)
+    );
+    assignments
+      .filter((a) => a.roleId === 'LANCELOT' || a.roleId === 'LANCELOT_GOOD')
+      .forEach((a) => seenAsEvil.add(a.seat));
     knowledge.set(
       merlin.seat,
-      seenByMerlin.map((a) => ({ seat: a.seat, label: 'Evil' }))
+      assignments.filter((a) => seenAsEvil.has(a.seat)).map((a) => ({ seat: a.seat, label: 'Evil' }))
     );
   }
 
@@ -226,6 +298,13 @@ function computeKnowledge(assignments) {
         candidates.map((c) => ({ seat: c.seat, label: 'Merlin or Morgana (unclear which)' }))
       );
     }
+  }
+
+  if (guinevere && lancelotGood && lancelotEvil) {
+    knowledge.set(guinevere.seat, [
+      { seat: lancelotGood.seat, label: 'A Lancelot (allegiance hidden)' },
+      { seat: lancelotEvil.seat, label: 'A Lancelot (allegiance hidden)' },
+    ]);
   }
 
   if (tristan && iseult) {

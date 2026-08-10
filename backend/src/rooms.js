@@ -9,7 +9,10 @@ const MAX_CHAT_HISTORY = 200;
 // Every settings key a player can cast a lobby preference vote on. The vote
 // is purely advisory — see Room.serializeForToken — the host's own toggle
 // is what actually gets used when the game starts.
-const VOTABLE_KEYS = ['merlin', 'percival', 'morgana', 'mordred', 'oberon', 'assassin', 'tristanIseult', 'ladyOfLake', 'excalibur'];
+const VOTABLE_KEYS = [
+  'merlin', 'percival', 'morgana', 'mordred', 'oberon', 'assassin', 'agravain', 'arthur', 'tristanIseult',
+  'lancelot', 'lancelotPair', 'guinevere', 'ladyOfLake', 'excalibur',
+];
 
 class Room {
   constructor(code) {
@@ -129,6 +132,10 @@ class Room {
     const goodSeats = assignments.filter((a) => a.team === 'good').map((a) => a.seat);
     const excaliburHolderSeat = this.settings.excalibur ? goodSeats[Math.floor(Math.random() * goodSeats.length)] : null;
 
+    // Paired Lancelots: the mission at which they swap allegiance is chosen
+    // once here, secretly, and never revealed to anyone — see _resolve_mission.
+    const swapMissionNumber = this.settings.lancelotPair ? Math.floor(Math.random() * 5) : null;
+
     const players = assignments.map((a) => ({
       seat: a.seat,
       displayName: displayNames.get(a.seat),
@@ -144,6 +151,7 @@ class Room {
       leaderSeat,
       ladyHolderSeat,
       excaliburHolderSeat,
+      swapMissionNumber,
       players,
     });
     this.phase = 'in_game';

@@ -100,11 +100,14 @@ function useMemoActions(dispatch) {
   const submitTeamVote = useCallback((approve) => {
     socket.emit('game:submitTeamVote', { approve });
   }, []);
-  const submitMissionVote = useCallback((success) => {
-    socket.emit('game:submitMissionVote', { success });
+  const submitMissionVote = useCallback((success, reverse = false) => {
+    socket.emit('game:submitMissionVote', { success, reverse });
   }, []);
   const submitAssassination = useCallback((targetSeat) => {
     socket.emit('game:submitAssassination', { targetSeat });
+  }, []);
+  const revealArthur = useCallback(() => {
+    socket.emit('game:revealArthur', {});
   }, []);
   const useLadyOfLake = useCallback((targetSeat) => {
     socket.emit('game:useLadyOfLake', { targetSeat });
@@ -134,6 +137,7 @@ function useMemoActions(dispatch) {
     submitTeamVote,
     submitMissionVote,
     submitAssassination,
+    revealArthur,
     useLadyOfLake,
     submitExcaliburDecision,
     setRolePreference,

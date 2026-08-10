@@ -181,7 +181,15 @@ function attachSocketHandlers(io, roomManager) {
     socket.on(
       'game:submitMissionVote',
       withRoom(async (room, player, payload) => {
-        await gameDb.castMissionVote(room.gameId, player.seatIndex, !!payload.success);
+        await gameDb.castMissionVote(room.gameId, player.seatIndex, !!payload.success, !!payload.reverse);
+        await broadcastRoom(io, room);
+      })
+    );
+
+    socket.on(
+      'game:revealArthur',
+      withRoom(async (room, player) => {
+        await gameDb.revealArthur(room.gameId, player.seatIndex);
         await broadcastRoom(io, room);
       })
     );

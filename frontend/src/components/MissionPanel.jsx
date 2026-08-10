@@ -5,6 +5,7 @@ export default function MissionPanel({ room, onPlayCard }) {
   const { game, players, you } = room;
   const onTeam = game.proposedTeam.includes(you.seat);
   const proposedSet = new Set(game.proposedTeam);
+  const canReverse = you.roleId === 'LANCELOT' && you.hasReverseCard;
 
   return (
     <div className="phase-panel">
@@ -29,6 +30,16 @@ export default function MissionPanel({ room, onPlayCard }) {
               {you.team === 'evil' && (
                 <button type="button" className="btn btn-reject" onClick={() => onPlayCard(false)}>
                   ❌ Fail
+                </button>
+              )}
+              {canReverse && (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => onPlayCard(true, true)}
+                  title="One-time use: flips this quest's final outcome instead of playing Success or Fail"
+                >
+                  🔄 Play Reverse (Lancelot)
                 </button>
               )}
             </div>

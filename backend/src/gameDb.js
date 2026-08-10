@@ -2,14 +2,24 @@ const { pool } = require('./db');
 const { ROLES } = require('./game/roles');
 
 /** Persists a freshly-dealt game and its initial turn state. */
-async function startGame({ roomCode, settings, seatOrder, leaderSeat, ladyHolderSeat, excaliburHolderSeat, players }) {
-  const { rows } = await pool.query('SELECT sp_start_game($1,$2,$3,$4,$5,$6,$7) AS id', [
+async function startGame({
+  roomCode,
+  settings,
+  seatOrder,
+  leaderSeat,
+  ladyHolderSeat,
+  excaliburHolderSeat,
+  swapMissionNumber,
+  players,
+}) {
+  const { rows } = await pool.query('SELECT sp_start_game($1,$2,$3,$4,$5,$6,$7,$8) AS id', [
     roomCode,
     settings,
     seatOrder,
     leaderSeat,
     ladyHolderSeat,
     excaliburHolderSeat,
+    swapMissionNumber,
     JSON.stringify(players),
   ]);
   return rows[0].id;
@@ -23,8 +33,12 @@ async function castTeamVote(gameId, seat, approve) {
   await pool.query('SELECT sp_cast_team_vote($1,$2,$3)', [gameId, seat, approve]);
 }
 
-async function castMissionVote(gameId, seat, success) {
-  await pool.query('SELECT sp_cast_mission_card($1,$2,$3)', [gameId, seat, success]);
+async function castMissionVote(gameId, seat, success, reverse = false) {
+  await pool.query('SELECT sp_cast_mission_card($1,$2,$3,$4)', [gameId, seat, success, reverse]);
+}
+
+async function revealArthur(gameId, seat) {
+  await pool.query('SELECT sp_reveal_arthur($1,$2)', [gameId, seat]);
 }
 
 async function excaliburDecision(gameId, seat, use) {
@@ -81,13 +95,26 @@ async function loadGameStateForSeat(gameId, seat) {
     hasAssassin: !!g.settings.assassin,
     hasLadyOfLake: !!g.settings.ladyOfLake,
     hasExcalibur: !!g.settings.excalibur,
+    hasLancelot: !!g.settings.lancelot,
+    hasLancelotPair: !!g.settings.lancelotPair,
     // Both tokens are physical props at the table in the rules this app
     // implements — who holds them is public, only what the holder learns
     // (a loyalty check, a peek at a mission's fail count) is private.
     ladyHolderSeat: g.settings.ladyOfLake ? g.lady_holder_seat : null,
     excaliburHolderSeat: g.settings.excalibur ? g.excalibur_holder_seat : null,
     excaliburUsed: g.excalibur_used,
+    // Whether Lancelot's Reverse card / the paired Lancelots' swap have
+    // happened is safe to broadcast to everyone: it never says who's
+    // involved, just that the event occurred.
+    lancelotReverseUsed: g.settings.lancelot ? g.lancelot_reverse_used : null,
+    lancelotsSwapped: g.settings.lancelotPair ? g.lancelots_swapped : null,
   };
+
+  const { rows: publicReveals } = await pool.query(
+    'SELECT seat, role, team FROM game_players WHERE game_id = $1 AND revealed = true ORDER BY seat',
+    [gameId]
+  );
+  base.publicReveals = publicReveals.map((r) => ({ seat: r.seat, roleId: r.role, role: ROLES[r.role].name, team: r.team }));
 
   if (g.phase === 'team_voting') {
     const { rows } = await pool.query(
@@ -111,7 +138,7 @@ async function loadGameStateForSeat(gameId, seat) {
 
   if (seat !== null && seat !== undefined) {
     const { rows: playerRows } = await pool.query(
-      'SELECT role, team, knowledge FROM game_players WHERE game_id = $1 AND seat = $2',
+      'SELECT role, team, knowledge, revealed FROM game_players WHERE game_id = $1 AND seat = $2',
       [gameId, seat]
     );
     const gp = playerRows[0];
@@ -123,7 +150,12 @@ async function loadGameStateForSeat(gameId, seat) {
         team: gp.team,
         description: ROLES[gp.role].description,
         knowledge: gp.knowledge,
+        revealed: gp.revealed,
       };
+
+      if (gp.role === 'LANCELOT') {
+        you.hasReverseCard = !g.lancelot_reverse_used;
+      }
 
       if (g.settings.ladyOfLake) {
         const { rows: reveals } = await pool.query(
@@ -165,5 +197,6 @@ module.exports = {
   excaliburDecision,
   useLadyOfLake,
   submitAssassination,
+  revealArthur,
   loadGameStateForSeat,
 };
