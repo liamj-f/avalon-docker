@@ -116,6 +116,25 @@ To poke at a running game's database directly:
 docker compose exec db psql -U avalon -d avalon
 ```
 
+### Pre-built images (GHCR)
+
+`.github/workflows/docker-publish.yml` builds `backend/` and `frontend/` as
+separate images and pushes them to GitHub Container Registry on every push
+to `main` (tagged `latest` and the short commit SHA) and on `v*.*.*` tags
+(tagged with the semver version). Pull requests build the same way to catch
+a broken Dockerfile, but never push.
+
+```
+ghcr.io/<owner>/<repo>/backend:latest
+ghcr.io/<owner>/<repo>/frontend:latest
+```
+
+**New packages default to private**, regardless of the repo's own
+visibility — first push, then go to each package's GitHub page → Package
+settings → Change visibility if you want them pullable without auth. To
+run from these instead of building locally, point `docker-compose.yml`'s
+`backend`/`frontend` services at `image: ghcr.io/...` instead of `build: ./...`.
+
 ## Local development (without Docker)
 
 ```bash
@@ -157,6 +176,8 @@ frontend/
     components/        # TeamBuilder, VotePanel, MissionPanel, AssassinPanel, LadyOfLakePanel,
                         # ExcaliburPanel, ArthurReveal, EndScreen, RoleCard, MissionTrack, Chat, PlayerAvatar
     store.jsx           # Socket.IO client + app state (React context)
+.github/workflows/
+  docker-publish.yml    # builds + pushes backend/frontend images to GHCR
 docker-compose.yml
 ```
 
