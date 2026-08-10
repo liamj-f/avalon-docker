@@ -1,15 +1,16 @@
-FROM node:20-alpine
+FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev --no-audit --no-fund
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src ./src
 COPY migrations ./migrations
 
-ENV NODE_ENV=production
+ENV PYTHONUNBUFFERED=1
 ENV PORT=4000
 EXPOSE 4000
 
-CMD ["node", "src/index.js"]
+WORKDIR /app/src
+CMD ["python", "main.py"]

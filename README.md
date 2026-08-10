@@ -1,9 +1,9 @@
 # Avalon: The Resistance — Multiplayer
 
 A self-hosted, real-time multiplayer implementation of *The Resistance: Avalon*,
-running as three Docker services: a React frontend, a Node/Socket.IO backend,
-and a Postgres database that is the actual source of truth for every game in
-progress — not just a history log.
+running as three Docker services: a React frontend, a Python (FastAPI +
+python-socketio) backend, and a Postgres database that is the actual source
+of truth for every game in progress — not just a history log.
 
 ## Features
 
@@ -33,11 +33,12 @@ progress — not just a history log.
 ## Architecture — Postgres is the game
 
 ```
-┌────────────┐      /api, /socket.io      ┌────────────┐   SQL calls   ┌────────────┐
-│  frontend  │ ─────────────────────────▶ │  backend   │ ─────────────▶│     db     │
-│ React+nginx│ ◀───────────────────────── │ Node+Socket│ ◀── NOTIFY ────│  Postgres  │
-│  (port 80) │                            │.IO (:4000) │   (LISTEN)    │  (:5432)   │
-└────────────┘                            └────────────┘               └────────────┘
+┌────────────┐      /api, /socket.io      ┌─────────────┐   SQL calls   ┌────────────┐
+│  frontend  │ ─────────────────────────▶ │   backend   │ ─────────────▶│     db     │
+│ React+nginx│ ◀───────────────────────── │  FastAPI +  │ ◀── NOTIFY ────│  Postgres  │
+│  (port 80) │                            │python-socket│   (LISTEN)    │  (:5432)   │
+│            │                            │io  (:4000)  │               │            │
+└────────────┘                            └─────────────┘               └────────────┘
 ```
 
 Once a game starts, **Postgres holds the live state** — whose turn it is,
@@ -50,10 +51,10 @@ sockets. There's no separate in-memory "game engine" object — the database
 *is* the engine.
 
 Every mutating procedure ends with `pg_notify('avalon_game_updates', game_id)`,
-and the backend keeps a dedicated `LISTEN` connection open
-(`backend/src/gameNotify.js`). That means **you can drive a live game by hand
-from `psql`** — the running app will update in real time, exactly as if a
-player had clicked a button:
+and the backend keeps a dedicated `LISTEN` connection open via `asyncpg`
+(`backend/src/game_notify.py`). That means **you can drive a live game by
+hand from `psql`** — the running app will update in real time, exactly as if
+a player had clicked a button:
 
 ```sql
 -- find the game_id for whatever room code is on someone's screen
@@ -83,17 +84,20 @@ it, but don't expose this Postgres instance publicly.
 
 **What stays in memory:** the lobby (who's connected, chat, the role
 preference poll, who's host) lives in the backend's `RoomManager`
-(`backend/src/rooms.js`), not Postgres. It's inherently tied to live socket
+(`backend/src/rooms.py`), not Postgres. It's inherently tied to live socket
 connections and doesn't need to survive a restart the way an in-progress
 vote does — there's no lobby left to rejoin after a restart either way.
 
-- `frontend/` — Vite + React SPA. nginx serves the static build and proxies
-  `/api/*` and `/socket.io/*` to the backend, so the browser only ever talks
-  to one origin.
-- `backend/` — Express + Socket.IO, a thin layer over the stored procedures.
-  `src/gameDb.js` calls them and reads back per-seat-redacted state;
-  `src/gameNotify.js` bridges Postgres `NOTIFY` back to socket broadcasts.
-  Migrations in `backend/migrations/` run automatically on boot.
+- `frontend/` — Vite + React SPA (unchanged by the Python rewrite below —
+  it talks Socket.IO's wire protocol, not any particular server language).
+  nginx serves the static build and proxies `/api/*` and `/socket.io/*` to
+  the backend, so the browser only ever talks to one origin.
+- `backend/` — FastAPI (REST) + `python-socketio` (`AsyncServer`, ASGI mode)
+  mounted on one app and served by `uvicorn`, a thin layer over the stored
+  procedures. `src/game_db.py` calls them and reads back per-seat-redacted
+  state; `src/game_notify.py` bridges Postgres `NOTIFY` back to socket
+  broadcasts via `asyncpg`. Migrations in `backend/migrations/` run
+  automatically on boot.
 - `db/` — plain `postgres:16-alpine`, no custom image needed; schema *and*
   game logic live in the backend's migrations, applied idempotently on boot.
 
@@ -143,8 +147,10 @@ docker compose up db
 
 # terminal 2: backend
 cd backend
-npm install
-DATABASE_URL=postgres://avalon:change_me@localhost:5432/avalon npm run dev
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cd src
+DATABASE_URL=postgres://avalon:change_me@localhost:5432/avalon PORT=4000 python main.py
 
 # terminal 3: frontend
 cd frontend
@@ -158,14 +164,16 @@ npm run dev   # http://localhost:5173, proxies /api and /socket.io to :4000
 backend/
   src/
     game/
-      config.js      # mission team-size / fail tables (also mirrored in Postgres' mission_config)
-      roles.js        # role metadata, dealing, knowledge computation — runs once at game start
-    rooms.js           # in-memory lobby manager (players, chat, host, role poll)
-    gameDb.js           # calls the sp_* stored procedures, reads back per-seat state
-    gameNotify.js         # LISTEN avalon_game_updates -> re-broadcast to the right room
-    socketHandlers.js      # Socket.IO event wiring
-    db.js                   # pg pool + migration runner
-    index.js                 # entrypoint
+      config.py       # mission team-size / fail tables (also mirrored in Postgres' mission_config)
+      roles.py         # role metadata, dealing, knowledge computation — runs once at game start
+    rooms.py            # in-memory lobby manager (players, chat, host, role poll)
+    room_code.py         # short room-code generator
+    game_db.py             # calls the sp_* stored procedures, reads back per-seat state
+    game_notify.py           # asyncpg LISTEN avalon_game_updates -> re-broadcast to the right room
+    socket_handlers.py         # python-socketio event wiring
+    db.py                        # asyncpg pool + migration runner
+    main.py                       # entrypoint: FastAPI + Socket.IO + uvicorn
+  requirements.txt
   migrations/
     001_schema.sql        # every table: games, game_players, game_missions, team_votes,
                            # mission_cards, lady_of_lake_events, excalibur_events, mission_config
@@ -214,7 +222,7 @@ pair are mutually exclusive** — pick one or the other, never both.
 There are a few documented fan variants of this pair. This build uses the
 straightforward one: Tristan and Iseult are both Loyal Servants of Arthur who
 are told each other's identity at the start of the game (see
-`computeKnowledge` in `backend/src/game/roles.js`). If you'd prefer a variant
+`compute_knowledge` in `backend/src/game/roles.py`). If you'd prefer a variant
 where one of them can secretly be Evil, that function is the place to change it.
 
 ### Design note: Lady of the Lake
@@ -259,8 +267,8 @@ Another fan mechanic with several incompatible real-world variants, so
 this build picks one clean interpretation per mode and documents it:
 
 - **Solo Lancelot** (`lancelot`): a Good player who appears to Merlin as
-  Evil (a built-in red herring — see `computeKnowledge` in
-  `backend/src/game/roles.js`), and who holds a single-use **Reverse**
+  Evil (a built-in red herring — see `compute_knowledge` in
+  `backend/src/game/roles.py`), and who holds a single-use **Reverse**
   card. While on a quest, Lancelot can play Reverse instead of Success;
   it doesn't count as a Fail card itself, but flips that quest's final
   result (success/fail) after the normal tally. It can interact in
@@ -285,7 +293,7 @@ this build picks one clean interpretation per mode and documents it:
   seats, but never which is currently Good or Evil — implemented exactly
   like Percival's ambiguous Merlin/Morgana pair.
 - **Solo Lancelot and the pair are mutually exclusive**, enforced in both
-  `validateSettings` (backend) and `validateSettingsClient` (frontend) —
+  `validate_settings` (backend) and `validateSettingsClient` (frontend) —
   see Verification below for the test covering this.
 
 ## Verification
@@ -342,9 +350,29 @@ against a real local Postgres 16 and the real backend process (not mocks):
   broadcasts for the same room could complete out of order and overwrite a
   client's fresh state with a stale read — fixed by serializing broadcasts
   per room.
-- Frontend: `npm run build` (Vite) completes cleanly.
+- **The Node → Python backend rewrite**: verified by re-running the exact
+  same Socket.IO test suites above (win conditions, reconnect, chat, every
+  new-role mechanic, and the manual-psql/`LISTEN`-`NOTIFY` bridge) against
+  the new `python-socketio` server, unchanged — proving the frontend and
+  the Postgres engine genuinely don't care which language sits between
+  them. This surfaced one more real bug: under rapid connect/disconnect
+  churn (e.g. one lobby finishing while the next forms), broadcasting via
+  `sio.emit(..., to=player.socket_id)` could occasionally deliver a
+  message to the wrong, since-reused connection — root-caused with
+  targeted logging, fixed by switching to Socket.IO's own per-player room
+  membership (`sio.enter_room`/`emit(room=...)`, keyed by the stable
+  player token) instead of threading a captured sid through our own
+  `Player` object over time; room membership is maintained by the library
+  itself and dropped automatically on disconnect, so it can't go stale the
+  way a manually-cached sid string could. 30+ rapid back-to-back lobby
+  creations reproduced the bug reliably before the fix and zero times
+  after, across repeated runs.
+- Frontend: `npm run build` (Vite) completes cleanly, unmodified by the
+  backend rewrite.
 
 Worth a real `docker compose up --build` on your machine before you consider
-it done — the Dockerfiles are standard multi-stage Node/nginx builds and
-everything they wrap has been verified directly, but the containers
-themselves haven't been built in this environment.
+it done — the Dockerfiles are a standard `python:3.12-slim` + `pip install`
+build and a multi-stage Node/nginx build respectively, and everything they
+wrap has been verified directly (including a real `pip install` from
+PyPI into a venv), but the containers themselves haven't been built in
+this environment.
