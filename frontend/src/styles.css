@@ -130,6 +130,38 @@ button {
   color: #ffd7d7;
 }
 
+.toast-update {
+  cursor: default;
+  background: var(--card);
+  border: 1px solid var(--gold);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toast-update button {
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.toast-update button:not(.toast-dismiss) {
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+  color: #26200f;
+  font-weight: 600;
+}
+
+.toast-update .toast-dismiss {
+  background: transparent;
+  color: var(--text-dim);
+  padding: 0 4px;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--card-border);
