@@ -1,4 +1,15 @@
-FROM node:20-alpine AS build
+# --platform=$BUILDPLATFORM pins this stage to the machine actually running
+# the build (never an emulated target arch): npm install/vite build only
+# ever produce plain static HTML/JS/CSS, so there's nothing
+# architecture-specific about running this stage under QEMU for an arm64
+# target -- doing so anyway was hitting a real QEMU bug (some native
+# dependency's arm64 binary -- likely esbuild's or rollup's -- triggering
+# "qemu: uncaught target signal 4 (Illegal instruction)" partway through
+# `npm install`, which then hung the whole job instead of failing cleanly).
+# Building natively for BUILDPLATFORM and only emulating the second,
+# Node-free nginx stage for the target sidesteps that category of bug
+# entirely, and is faster besides.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --no-audit --no-fund
