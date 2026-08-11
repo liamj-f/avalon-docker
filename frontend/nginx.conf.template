@@ -30,6 +30,18 @@ server {
         proxy_read_timeout 3600s;
     }
 
+    # Service worker + manifest (see vite.config.js's VitePWA block) --
+    # explicitly uncached so the browser always revalidates before using
+    # either, rather than a long-lived HTTP cache delaying players from
+    # picking up a new build's "update available" prompt.
+    location = /sw.js {
+        add_header Cache-Control "no-cache";
+    }
+
+    location = /manifest.webmanifest {
+        add_header Cache-Control "no-cache";
+    }
+
     # SPA fallback
     location / {
         try_files $uri /index.html;
