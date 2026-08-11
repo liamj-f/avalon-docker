@@ -3,6 +3,7 @@ import { useGame } from './store.jsx';
 import Home from './pages/Home.jsx';
 import Lobby from './pages/Lobby.jsx';
 import Game from './pages/Game.jsx';
+import PwaUpdatePrompt from './PwaUpdatePrompt.jsx';
 
 export default function App() {
   const { state, clearError } = useGame();
@@ -34,6 +35,8 @@ export default function App() {
           {error}
         </div>
       )}
+
+      <PwaUpdatePrompt />
 
       <main className="app-main">
         {!room && <Home />}
