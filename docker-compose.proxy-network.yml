@@ -1,0 +1,53 @@
+# Optional add-on for reverse-proxying through an nginx (or Nginx Proxy
+# Manager / Traefik / Caddy) container that lives in its own, separate
+# compose stack. Use it alongside the base file, not instead of it:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.proxy-network.yml up -d
+#
+# This attaches `frontend` to PROXY_NETWORK -- an *external* Docker network
+# that your other nginx stack already created -- in addition to this
+# stack's own `default` network. `frontend` keeps talking to `backend` over
+# `default` exactly as before (it already proxies /api and /socket.io to it
+# internally -- see frontend/nginx.conf); only `frontend` needs to be
+# reachable from your proxy, so nothing else in this file changes.
+#
+# Prerequisite: PROXY_NETWORK must already exist -- it's created by
+# whichever compose stack your other nginx container lives in, not by this
+# one (that's what `external: true` below means). Find its name with
+# `docker network ls`, or `docker inspect <your-nginx-container> --format
+# '{{json .NetworkSettings.Networks}}'` if you're not sure which network
+# it's actually on. Set it via PROXY_NETWORK in .env (defaults to
+# `nginx-proxy` if unset).
+#
+# In your other nginx container's config, proxy to this one by Docker's
+# built-in DNS: Compose registers each service's own name (`frontend`) as a
+# network alias on every network it joins, including this external one --
+# no IP address or port-mapping needed:
+#
+#   location / {
+#       proxy_pass http://frontend:80;
+#       proxy_set_header Host $host;
+#       proxy_set_header X-Real-IP $remote_addr;
+#       proxy_http_version 1.1;
+#       proxy_set_header Upgrade $http_upgrade;
+#       proxy_set_header Connection "upgrade";
+#   }
+#
+# (If your other stack already has its own service literally named
+# `frontend` on that same network, that alias will collide -- give this one
+# an explicit `container_name:` here and proxy_pass to that instead.)
+#
+# The `ports:` mapping in docker-compose.yml is untouched by this file, so
+# FRONTEND_PORT stays reachable directly too; drop it there yourself if you
+# only want traffic to arrive via the proxy.
+
+services:
+  frontend:
+    networks:
+      - default
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-nginx-proxy}

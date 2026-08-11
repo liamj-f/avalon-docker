@@ -178,6 +178,27 @@ own migrations (`backend/migrations/*.sql`, idempotent, tracked in
 `schema_migrations`) *inside* it on every boot, same as it does against the
 bundled `db` container.
 
+### Reverse-proxying through your own nginx container
+
+If you already run an nginx (or Nginx Proxy Manager / Traefik / Caddy)
+container for other sites and want it to reach `frontend` directly over
+Docker's own network instead of going back out through the host's published
+`FRONTEND_PORT`, add `docker-compose.proxy-network.yml` on top of the base
+file:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.proxy-network.yml up -d
+```
+
+This attaches `frontend` to `PROXY_NETWORK` — an **external** network your
+other nginx stack already created (set its name in `.env`; see
+`.env.example`) — in addition to this stack's own network, so `backend`
+communication is unaffected. Your other container can then `proxy_pass
+http://frontend:80;` directly, using Compose's automatic per-service DNS
+alias — no IP address or extra port-mapping needed. Full detail (including
+what to do if `frontend` collides with a same-named service on your other
+stack) is in the comment at the top of `docker-compose.proxy-network.yml`.
+
 ## Local development (without Docker)
 
 ```bash
@@ -226,7 +247,8 @@ frontend/
 .github/workflows/
   docker-publish.yml    # builds + pushes multi-arch backend/frontend images to GHCR
 docker-compose.yml
-docker-compose.external-db.yml  # same app, no bundled `db` -- point it at Postgres you already run
+docker-compose.external-db.yml    # same app, no bundled `db` -- point it at Postgres you already run
+docker-compose.proxy-network.yml  # add-on: attach `frontend` to your own nginx container's network
 ```
 
 ## Rules reference (as implemented)
