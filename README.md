@@ -103,9 +103,12 @@ vote does — there's no lobby left to rejoin after a restart either way.
 
 ## Running it
 
+`docker-compose.yml` runs the pre-built images published to GHCR (see
+below) — nothing is built from source by default:
+
 ```bash
 cp .env.example .env    # adjust POSTGRES_PASSWORD etc. if you like
-docker compose up --build
+docker compose up -d
 ```
 
 Then open **http://localhost:8080** (or whatever `FRONTEND_PORT` you set).
@@ -120,30 +123,39 @@ To poke at a running game's database directly:
 docker compose exec db psql -U avalon -d avalon
 ```
 
+To build from your own local changes instead of pulling, swap `image:` for
+`build: ./backend` (or `./frontend`) in `docker-compose.yml` — each
+service's Dockerfile comment notes this — then `docker compose up --build`.
+For actively iterating on the code without a container rebuild each time,
+see **Local development** below instead.
+
 ### Pre-built images (GHCR)
 
 `.github/workflows/docker-publish.yml` builds `backend/` and `frontend/` as
 separate images and pushes them to GitHub Container Registry on every push
 to `main` (tagged `latest` and the short commit SHA) and on `v*.*.*` tags
 (tagged with the semver version). Pull requests build the same way to catch
-a broken Dockerfile, but never push.
+a broken Dockerfile, but never push. `docker-compose.yml` pins neither by
+default (`${IMAGE_TAG:-latest}`) — set `IMAGE_TAG` in `.env` to a specific
+short SHA or `v*.*.*` tag for a reproducible deploy instead of always
+floating on `latest`.
 
 ```
-ghcr.io/<owner>/<repo>/backend:latest
-ghcr.io/<owner>/<repo>/frontend:latest
+ghcr.io/liamj-f/avalon-docker/backend:latest
+ghcr.io/liamj-f/avalon-docker/frontend:latest
 ```
 
 **New packages default to private**, regardless of the repo's own
-visibility — first push, then go to each package's GitHub page → Package
-settings → Change visibility if you want them pullable without auth. To
-run from these instead of building locally, point `docker-compose.yml`'s
-`backend`/`frontend` services at `image: ghcr.io/...` instead of `build: ./...`.
+visibility — until you change that (each package's GitHub page → Package
+settings → Change visibility), `docker compose up` will fail to pull with
+an auth error unless you're logged in: `docker login ghcr.io` (a GitHub PAT
+with `read:packages` works as the password) before pulling.
 
 Both images are published **multi-arch** (`linux/amd64` + `linux/arm64`, via
 QEMU in the workflow) as a single manifest list per tag, so the same
-`ghcr.io/<owner>/<repo>/backend:latest` pulls the right variant automatically
-whether the host is a normal x86_64 server, a Raspberry Pi, or Apple
-Silicon — no separate `-arm64` tag to remember.
+`ghcr.io/liamj-f/avalon-docker/backend:latest` pulls the right variant
+automatically whether the host is a normal x86_64 server, a Raspberry Pi, or
+Apple Silicon — no separate `-arm64` tag to remember.
 
 ### Using an existing Postgres instance
 
@@ -165,6 +177,39 @@ database — the app never creates the database or role itself, only runs its
 own migrations (`backend/migrations/*.sql`, idempotent, tracked in
 `schema_migrations`) *inside* it on every boot, same as it does against the
 bundled `db` container.
+
+### Reverse-proxying through your own nginx container
+
+If you already run an nginx (or Nginx Proxy Manager / Traefik / Caddy)
+container for other sites and want it to reach the frontend container
+directly over Docker's own network instead of going back out through the
+host's published `FRONTEND_PORT`, add `docker-compose.proxy-network.yml` on
+top of the base file:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.proxy-network.yml up -d
+```
+
+This attaches the frontend container (named `avalon-ui`, fixed by
+`container_name:` in `docker-compose.yml`) to `PROXY_NETWORK` — an
+**external** network your other nginx stack already created (set its name
+in `.env`; see `.env.example`) — in addition to this stack's own network,
+so `backend` communication is unaffected. Your other container can then
+`proxy_pass http://avalon-ui:80;` directly — Docker resolves a container by
+its `container_name` network-wide automatically, no IP address or extra
+port-mapping needed. Full detail (including what to do if `avalon-ui`
+collides with a same-named container on your other stack) is in the comment
+at the top of `docker-compose.proxy-network.yml`.
+
+Both container names (`avalon-backend`, `avalon-ui`) are fixed in
+`docker-compose.yml` rather than left to Compose's auto-generated
+`<project>-<service>-<n>` naming, for exactly this kind of external
+tooling. `frontend/nginx.conf.template`'s own proxy target
+(`BACKEND_HOST`/`BACKEND_PORT`, defaulting to `backend`/`4000` — Compose's
+service-name alias, not the container name) is set to match
+`avalon-backend` in `docker-compose.yml`'s `frontend.environment`, so
+renaming either container only means updating that one place, not the
+image itself.
 
 ## Local development (without Docker)
 
@@ -211,10 +256,13 @@ frontend/
     components/        # TeamBuilder, VotePanel, MissionPanel, AssassinPanel, LadyOfLakePanel,
                         # ExcaliburPanel, ArthurReveal, EndScreen, RoleCard, MissionTrack, Chat, PlayerAvatar
     store.jsx           # Socket.IO client + app state (React context)
+  nginx.conf.template  # SPA + reverse proxy to the backend; BACKEND_HOST/BACKEND_PORT
+                        # substituted at container startup, not hardcoded
 .github/workflows/
   docker-publish.yml    # builds + pushes multi-arch backend/frontend images to GHCR
 docker-compose.yml
-docker-compose.external-db.yml  # same app, no bundled `db` -- point it at Postgres you already run
+docker-compose.external-db.yml    # same app, no bundled `db` -- point it at Postgres you already run
+docker-compose.proxy-network.yml  # add-on: attach `frontend` to your own nginx container's network
 ```
 
 ## Rules reference (as implemented)
@@ -406,9 +454,10 @@ against a real local Postgres 16 and the real backend process (not mocks):
   it on real arm64/amd64 hosts hasn't been (no registry egress in this
   sandbox, same constraint as below).
 
-Worth a real `docker compose up --build` on your machine before you consider
-it done — the Dockerfiles are a standard `python:3.12-slim` + `pip install`
-build and a multi-stage Node/nginx build respectively, and everything they
-wrap has been verified directly (including a real `pip install` from
-PyPI into a venv), but the containers themselves haven't been built in
-this environment.
+Worth a real `docker compose up -d` (pulling the published GHCR images) or
+`docker compose up --build` (after swapping `image:` for `build:` in
+`docker-compose.yml`) on your machine before you consider it done — the
+Dockerfiles are a standard `python:3.12-slim` + `pip install` build and a
+multi-stage Node/nginx build respectively, and everything they wrap has been
+verified directly (including a real `pip install` from PyPI into a venv),
+but the containers themselves haven't been built in this environment.

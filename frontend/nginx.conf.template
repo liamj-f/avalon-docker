@@ -5,8 +5,15 @@ server {
     index index.html;
 
     # REST API
+    #
+    # BACKEND_HOST/BACKEND_PORT are substituted at container startup (see
+    # the Dockerfile's ENV defaults and NGINX_ENVSUBST_FILTER) rather than
+    # hardcoded, so this image works regardless of what the backend
+    # container/service is actually named or which network alias reaches
+    # it -- set them in docker-compose.yml if you rename it away from the
+    # default `backend` Compose service name.
     location /api/ {
-        proxy_pass http://backend:4000;
+        proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -14,7 +21,7 @@ server {
 
     # WebSocket (Socket.IO) — long-lived connections, upgrade headers required.
     location /socket.io/ {
-        proxy_pass http://backend:4000;
+        proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT};
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";

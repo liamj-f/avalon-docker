@@ -15,7 +15,21 @@ services:
       retries: 10
 
   backend:
-    build: ./backend
+    # Pre-built by .github/workflows/docker-publish.yml on every push to
+    # main. Multi-arch (amd64 + arm64), so this resolves correctly on any
+    # host. Pin IMAGE_TAG (e.g. to a short commit SHA or a v*.*.* release)
+    # instead of always floating on :latest if you want reproducible
+    # deploys. To build from source instead, replace `image:` with
+    # `build: ./backend`.
+    image: ghcr.io/liamj-f/avalon-docker/backend:${IMAGE_TAG:-latest}
+    # A fixed, friendly name for `docker ps`/`docker logs`/other tooling.
+    # Doesn't change how other containers reach this one -- Compose keeps
+    # aliasing it as `backend` on the `default` network regardless (that's
+    # what DATABASE_URL below and BACKEND_HOST on frontend rely on) -- but
+    # it does mean you can't run two copies of this stack on one Docker
+    # host without renaming one of them; fine for a single self-hosted
+    # instance.
+    container_name: avalon-backend
     restart: unless-stopped
     environment:
       PORT: 4000
@@ -26,8 +40,17 @@ services:
         condition: service_healthy
 
   frontend:
-    build: ./frontend
+    image: ghcr.io/liamj-f/avalon-docker/frontend:${IMAGE_TAG:-latest}
+    container_name: avalon-ui
     restart: unless-stopped
+    environment:
+      # See frontend/nginx.conf.template -- must match wherever the backend
+      # actually is. avalon-backend resolves here via container_name above
+      # (Docker's embedded DNS resolves by container name automatically,
+      # network-wide, independent of Compose's own `backend` service-name
+      # alias, which also still works).
+      BACKEND_HOST: avalon-backend
+      BACKEND_PORT: 4000
     ports:
       - "${FRONTEND_PORT:-8080}:80"
     depends_on:
