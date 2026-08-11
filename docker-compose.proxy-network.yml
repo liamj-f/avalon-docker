@@ -8,8 +8,8 @@
 # that your other nginx stack already created -- in addition to this
 # stack's own `default` network. `frontend` keeps talking to `backend` over
 # `default` exactly as before (it already proxies /api and /socket.io to it
-# internally -- see frontend/nginx.conf); only `frontend` needs to be
-# reachable from your proxy, so nothing else in this file changes.
+# internally -- see frontend/nginx.conf.template); only `frontend` needs to
+# be reachable from your proxy, so nothing else in this file changes.
 #
 # Prerequisite: PROXY_NETWORK must already exist -- it's created by
 # whichever compose stack your other nginx container lives in, not by this
@@ -20,12 +20,12 @@
 # `nginx-proxy` if unset).
 #
 # In your other nginx container's config, proxy to this one by Docker's
-# built-in DNS: Compose registers each service's own name (`frontend`) as a
-# network alias on every network it joins, including this external one --
-# no IP address or port-mapping needed:
+# built-in DNS -- docker-compose.yml gives this container a fixed name
+# (`avalon-ui`), which Docker resolves network-wide automatically (Compose
+# also aliases it as plain `frontend`, which works too):
 #
 #   location / {
-#       proxy_pass http://frontend:80;
+#       proxy_pass http://avalon-ui:80;
 #       proxy_set_header Host $host;
 #       proxy_set_header X-Real-IP $remote_addr;
 #       proxy_http_version 1.1;
@@ -33,9 +33,9 @@
 #       proxy_set_header Connection "upgrade";
 #   }
 #
-# (If your other stack already has its own service literally named
-# `frontend` on that same network, that alias will collide -- give this one
-# an explicit `container_name:` here and proxy_pass to that instead.)
+# (If your other stack already has its own container literally named
+# `avalon-ui` on that same network -- unlikely, but -- rename this one's
+# `container_name:` in docker-compose.yml and proxy_pass to that instead.)
 #
 # The `ports:` mapping in docker-compose.yml is untouched by this file, so
 # FRONTEND_PORT stays reachable directly too; drop it there yourself if you

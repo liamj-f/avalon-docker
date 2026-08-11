@@ -181,23 +181,35 @@ bundled `db` container.
 ### Reverse-proxying through your own nginx container
 
 If you already run an nginx (or Nginx Proxy Manager / Traefik / Caddy)
-container for other sites and want it to reach `frontend` directly over
-Docker's own network instead of going back out through the host's published
-`FRONTEND_PORT`, add `docker-compose.proxy-network.yml` on top of the base
-file:
+container for other sites and want it to reach the frontend container
+directly over Docker's own network instead of going back out through the
+host's published `FRONTEND_PORT`, add `docker-compose.proxy-network.yml` on
+top of the base file:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.proxy-network.yml up -d
 ```
 
-This attaches `frontend` to `PROXY_NETWORK` — an **external** network your
-other nginx stack already created (set its name in `.env`; see
-`.env.example`) — in addition to this stack's own network, so `backend`
-communication is unaffected. Your other container can then `proxy_pass
-http://frontend:80;` directly, using Compose's automatic per-service DNS
-alias — no IP address or extra port-mapping needed. Full detail (including
-what to do if `frontend` collides with a same-named service on your other
-stack) is in the comment at the top of `docker-compose.proxy-network.yml`.
+This attaches the frontend container (named `avalon-ui`, fixed by
+`container_name:` in `docker-compose.yml`) to `PROXY_NETWORK` — an
+**external** network your other nginx stack already created (set its name
+in `.env`; see `.env.example`) — in addition to this stack's own network,
+so `backend` communication is unaffected. Your other container can then
+`proxy_pass http://avalon-ui:80;` directly — Docker resolves a container by
+its `container_name` network-wide automatically, no IP address or extra
+port-mapping needed. Full detail (including what to do if `avalon-ui`
+collides with a same-named container on your other stack) is in the comment
+at the top of `docker-compose.proxy-network.yml`.
+
+Both container names (`avalon-backend`, `avalon-ui`) are fixed in
+`docker-compose.yml` rather than left to Compose's auto-generated
+`<project>-<service>-<n>` naming, for exactly this kind of external
+tooling. `frontend/nginx.conf.template`'s own proxy target
+(`BACKEND_HOST`/`BACKEND_PORT`, defaulting to `backend`/`4000` — Compose's
+service-name alias, not the container name) is set to match
+`avalon-backend` in `docker-compose.yml`'s `frontend.environment`, so
+renaming either container only means updating that one place, not the
+image itself.
 
 ## Local development (without Docker)
 
@@ -244,6 +256,8 @@ frontend/
     components/        # TeamBuilder, VotePanel, MissionPanel, AssassinPanel, LadyOfLakePanel,
                         # ExcaliburPanel, ArthurReveal, EndScreen, RoleCard, MissionTrack, Chat, PlayerAvatar
     store.jsx           # Socket.IO client + app state (React context)
+  nginx.conf.template  # SPA + reverse proxy to the backend; BACKEND_HOST/BACKEND_PORT
+                        # substituted at container startup, not hardcoded
 .github/workflows/
   docker-publish.yml    # builds + pushes multi-arch backend/frontend images to GHCR
 docker-compose.yml
