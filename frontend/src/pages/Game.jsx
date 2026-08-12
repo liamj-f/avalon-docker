@@ -8,7 +8,6 @@ import AssassinPanel from '../components/AssassinPanel.jsx';
 import LadyOfLakePanel from '../components/LadyOfLakePanel.jsx';
 import ExcaliburPanel from '../components/ExcaliburPanel.jsx';
 import EndScreen from '../components/EndScreen.jsx';
-import RoleCard from '../components/RoleCard.jsx';
 import ArthurReveal from '../components/ArthurReveal.jsx';
 import Chat from '../components/Chat.jsx';
 import VoteHistory from '../components/VoteHistory.jsx';
@@ -71,7 +70,6 @@ export default function Game() {
 
   return (
     <div className="game-layout">
-      {game.you && <RoleCard you={game.you} players={room.players} />}
       {openResult && (
         <QuestResultModal result={openResult} players={room.players} onClose={() => setOpenQuestNumber(null)} />
       )}
