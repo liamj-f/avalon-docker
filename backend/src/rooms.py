@@ -27,7 +27,7 @@ MAX_CHAT_HISTORY = 200
 # is purely advisory -- see Room.serialize_for_token -- the host's own
 # toggle is what actually gets used when the game starts.
 VOTABLE_KEYS = [
-    "merlin", "percival", "morgana", "mordred", "oberon", "assassin", "agravain", "arthur", "tristanIseult",
+    "merlin", "percival", "morgana", "mordred", "oberon", "assassin", "agravain", "arthur", "gawain", "tristanIseult",
     "lancelot", "lancelotPair", "guinevere", "ladyOfLake", "excalibur",
 ]
 

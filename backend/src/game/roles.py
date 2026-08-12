@@ -102,6 +102,13 @@ ROLES: dict[str, dict[str, Any]] = {
         "optional": True,
         "description": "Once two quests have failed, you may publicly reveal yourself as Arthur to rally Good — at the cost of painting a target on your back.",
     },
+    "GAWAIN": {
+        "id": "GAWAIN",
+        "name": "Gawain",
+        "team": "good",
+        "optional": True,
+        "description": "A plain Loyal knight with no special knowledge — but a second name the Assassin can win by guessing instead of Merlin.",
+    },
     "LANCELOT": {
         "id": "LANCELOT",
         "name": "Lancelot",
@@ -140,7 +147,9 @@ ROLES: dict[str, dict[str, Any]] = {
 }
 
 # Roles the lobby UI can toggle on/off. Order matters for display.
-TOGGLEABLE_ROLES = ["MERLIN", "PERCIVAL", "MORGANA", "MORDRED", "OBERON", "ASSASSIN", "AGRAVAIN", "ARTHUR", "TRISTAN"]
+TOGGLEABLE_ROLES = [
+    "MERLIN", "PERCIVAL", "MORGANA", "MORDRED", "OBERON", "ASSASSIN", "AGRAVAIN", "ARTHUR", "GAWAIN", "TRISTAN",
+]
 
 
 def default_settings() -> dict[str, bool]:
@@ -153,6 +162,7 @@ def default_settings() -> dict[str, bool]:
         "assassin": True,
         "agravain": False,
         "arthur": False,
+        "gawain": False,
         "tristanIseult": False,
         "lancelot": False,
         "lancelotPair": False,
@@ -172,8 +182,10 @@ def validate_settings(player_count: int, settings: dict[str, bool]) -> list[str]
         errors.append(f"Player count must be between 5 and 10 (got {player_count}).")
         return errors
 
-    if settings.get("assassin") and not settings.get("merlin"):
-        errors.append("The Assassin requires Merlin to be in play.")
+    if settings.get("assassin") and not (settings.get("merlin") or settings.get("gawain") or settings.get("tristanIseult")):
+        errors.append(
+            "The Assassin needs at least one valid target in play: Merlin, Gawain, or the Tristan & Iseult pair."
+        )
     if settings.get("percival") and not settings.get("merlin"):
         errors.append("Percival requires Merlin to be in play.")
     if settings.get("morgana") and not settings.get("percival"):
@@ -226,6 +238,8 @@ def build_role_list(player_count: int, settings: dict[str, bool]) -> list[str]:
         good_special.append("PERCIVAL")
     if settings.get("arthur"):
         good_special.append("ARTHUR")
+    if settings.get("gawain"):
+        good_special.append("GAWAIN")
     if settings.get("lancelot"):
         good_special.append("LANCELOT")
     if settings.get("lancelotPair"):

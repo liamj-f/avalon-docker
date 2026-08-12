@@ -8,29 +8,32 @@ function cardKind(card) {
   return card.success ? 'success' : 'fail';
 }
 
-export default function ExcaliburPanel({ room, onDecide }) {
+export default function ExcaliburPanel({ room, onView, onDecide }) {
   const { game, players, you } = room;
   const isHolder = you.seat === game.excaliburHolderSeat;
   const holderName = players.find((p) => p.seat === game.excaliburHolderSeat)?.displayName;
   const proposedSet = new Set(game.proposedTeam);
-  const [target, setTarget] = useState(null);
-  // Only meaningful when the target's card is Reverse -- there's no natural
+
+  // The holder can only ever see the one card they've committed to viewing
+  // (you.excaliburViewing, set server-side by sp_excalibur_view) -- there's
+  // no "browse everyone's card" step anymore, matching the real rule.
+  const viewing = you.excaliburViewing || null;
+  const [pendingTarget, setPendingTarget] = useState(null);
+  // Only meaningful when the viewed card is Reverse -- there's no natural
   // "opposite" to flip it to, so the holder picks explicitly.
   const [reverseChoice, setReverseChoice] = useState(null); // 'success' | 'fail'
 
-  const participants = you.excaliburParticipants || [];
-  const targetCard = participants.find((c) => c.seat === target);
-  const targetIsReverse = Boolean(targetCard?.reversed);
-  const canUse = target !== null && (!targetIsReverse || reverseChoice !== null);
+  const viewedIsReverse = Boolean(viewing?.reversed);
+  const canUse = !viewedIsReverse || reverseChoice !== null;
 
-  const selectTarget = (seat) => {
-    setTarget(seat);
-    setReverseChoice(null);
+  const view = () => {
+    if (pendingTarget === null) return;
+    onView(pendingTarget);
   };
 
   const use = () => {
     if (!canUse) return;
-    onDecide(true, target, targetIsReverse ? reverseChoice === 'success' : undefined);
+    onDecide(true, viewedIsReverse ? reverseChoice === 'success' : undefined);
   };
 
   return (
@@ -38,7 +41,9 @@ export default function ExcaliburPanel({ room, onDecide }) {
       <h2 className="phase-title">⚔️ Excalibur</h2>
       <p className="phase-lead">
         {isHolder
-          ? 'You may change exactly one participant’s card — using it spends Excalibur for the rest of the game, so choose carefully.'
+          ? viewing
+            ? 'You may change this card — using it spends Excalibur for the rest of the game, so choose carefully.'
+            : 'Pick one participant to look at their real card. You only get to see one — choose wisely.'
           : `${holderName} holds Excalibur and is deciding whether to change this quest's outcome.`}
       </p>
 
@@ -50,28 +55,49 @@ export default function ExcaliburPanel({ room, onDecide }) {
         </div>
       )}
 
-      {isHolder && (
+      {isHolder && !viewing && (
         <>
-          <p className="hint">Everyone&rsquo;s actual card, just for you — pick who (if anyone) to change:</p>
-          <div className="excalibur-cards">
-            {participants.map((card) => {
-              const player = players.find((p) => p.seat === card.seat);
-              const kind = cardKind(card);
+          <div className="avatar-grid">
+            {game.proposedTeam.map((seat) => {
+              const p = players.find((pl) => pl.seat === seat);
               return (
-                <button
-                  type="button"
-                  key={card.seat}
-                  className={`excalibur-card excalibur-card-${kind} ${target === card.seat ? 'excalibur-card-selected' : ''}`}
-                  onClick={() => selectTarget(card.seat)}
-                >
-                  <span className="excalibur-card-name">{player?.displayName}</span>
-                  <span className="excalibur-card-value">{CARD_LABEL[kind]}</span>
-                </button>
+                <PlayerAvatar
+                  key={seat}
+                  player={p}
+                  isSelected={pendingTarget === seat}
+                  selectable
+                  onClick={() => setPendingTarget(seat)}
+                />
               );
             })}
           </div>
+          <div className="vote-buttons">
+            <button type="button" className="btn btn-primary" disabled={pendingTarget === null} onClick={view}>
+              👁️ View{pendingTarget !== null ? ` ${players.find((p) => p.seat === pendingTarget)?.displayName}'s` : ''}{' '}
+              card
+            </button>
+          </div>
+        </>
+      )}
 
-          {targetIsReverse && (
+      {isHolder && viewing && (
+        <>
+          <p className="hint">{players.find((p) => p.seat === viewing.targetSeat)?.displayName}&rsquo;s actual card:</p>
+          <div className="excalibur-cards">
+            {(() => {
+              const kind = cardKind(viewing);
+              return (
+                <div className={`excalibur-card excalibur-card-${kind} excalibur-card-selected`}>
+                  <span className="excalibur-card-name">
+                    {players.find((p) => p.seat === viewing.targetSeat)?.displayName}
+                  </span>
+                  <span className="excalibur-card-value">{CARD_LABEL[kind]}</span>
+                </div>
+              );
+            })()}
+          </div>
+
+          {viewedIsReverse && (
             <div className="vote-buttons">
               <p className="hint">Reverse has no natural opposite — choose what it becomes:</p>
               <button
@@ -93,10 +119,10 @@ export default function ExcaliburPanel({ room, onDecide }) {
 
           <div className="vote-buttons">
             <button type="button" className="btn btn-approve" disabled={!canUse} onClick={use}>
-              ✨ Use Excalibur{target !== null ? ` on ${players.find((p) => p.seat === target)?.displayName}` : ''}
+              ✨ Use Excalibur to change it
             </button>
             <button type="button" className="btn btn-ghost" onClick={() => onDecide(false)}>
-              Don&rsquo;t use it
+              Leave it as is
             </button>
           </div>
         </>

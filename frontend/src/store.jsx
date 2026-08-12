@@ -103,8 +103,8 @@ function useMemoActions(dispatch) {
   const submitMissionVote = useCallback((success, reverse = false) => {
     socket.emit('game:submitMissionVote', { success, reverse });
   }, []);
-  const submitAssassination = useCallback((targetSeat) => {
-    socket.emit('game:submitAssassination', { targetSeat });
+  const submitAssassination = useCallback((targetSeats) => {
+    socket.emit('game:submitAssassination', { targetSeats });
   }, []);
   const revealArthur = useCallback(() => {
     socket.emit('game:revealArthur', {});
@@ -112,8 +112,11 @@ function useMemoActions(dispatch) {
   const useLadyOfLake = useCallback((targetSeat) => {
     socket.emit('game:useLadyOfLake', { targetSeat });
   }, []);
-  const submitExcaliburDecision = useCallback((use, targetSeat, newSuccess) => {
-    socket.emit('game:excaliburDecision', { use, targetSeat, newSuccess });
+  const submitExcaliburView = useCallback((targetSeat) => {
+    socket.emit('game:excaliburView', { targetSeat });
+  }, []);
+  const submitExcaliburDecision = useCallback((use, newSuccess) => {
+    socket.emit('game:excaliburDecision', { use, newSuccess });
   }, []);
   const setRolePreference = useCallback((key, want) => {
     socket.emit('room:setRolePreference', { key, want });
@@ -139,6 +142,7 @@ function useMemoActions(dispatch) {
     submitAssassination,
     revealArthur,
     useLadyOfLake,
+    submitExcaliburView,
     submitExcaliburDecision,
     setRolePreference,
     transferHost,

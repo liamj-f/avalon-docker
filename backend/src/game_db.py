@@ -18,15 +18,17 @@ from game.roles import ROLES
 
 def _excalibur_summary_for_mission(event: Any) -> dict[str, Any]:
     """The public half of one quest's excalibur_events row (see the query in
-    load_game_state_for_seat) -- who held it, whether they used it, and who
-    they targeted. Never the target's original/new card; that's private,
-    surfaced only to the holder and the target themselves, below."""
+    load_game_state_for_seat) -- who held it, who they viewed, and whether
+    they used it on them. The viewed seat is public regardless of whether it
+    was used (see 005_excalibur_view_and_assassin_rework.sql for why); the
+    target's original/new card value stays private, surfaced only to the
+    holder and the target themselves, below."""
     if event is None:
         return {"excaliburHolderSeat": None, "excaliburUsed": False, "excaliburTargetSeat": None}
     return {
         "excaliburHolderSeat": event["holder_seat"],
         "excaliburUsed": event["used"],
-        "excaliburTargetSeat": event["target_seat"] if event["used"] else None,
+        "excaliburTargetSeat": event["target_seat"],
     }
 
 
@@ -76,13 +78,14 @@ async def reveal_arthur(game_id: UUID, seat: int) -> None:
     await pool.execute("SELECT sp_reveal_arthur($1,$2)", game_id, seat)
 
 
-async def excalibur_decision(
-    game_id: UUID, seat: int, use: bool, target_seat: int | None = None, new_success: bool | None = None
-) -> None:
+async def excalibur_view(game_id: UUID, seat: int, target_seat: int) -> None:
     pool = await get_pool()
-    await pool.execute(
-        "SELECT sp_excalibur_decision($1,$2,$3,$4,$5)", game_id, seat, use, target_seat, new_success
-    )
+    await pool.execute("SELECT sp_excalibur_view($1,$2,$3)", game_id, seat, target_seat)
+
+
+async def excalibur_decision(game_id: UUID, seat: int, use: bool, new_success: bool | None = None) -> None:
+    pool = await get_pool()
+    await pool.execute("SELECT sp_excalibur_decision($1,$2,$3,$4)", game_id, seat, use, new_success)
 
 
 async def use_lady_of_lake(game_id: UUID, seat: int, target_seat: int) -> None:
@@ -90,9 +93,9 @@ async def use_lady_of_lake(game_id: UUID, seat: int, target_seat: int) -> None:
     await pool.execute("SELECT sp_use_lady_of_lake($1,$2,$3)", game_id, seat, target_seat)
 
 
-async def submit_assassination(game_id: UUID, seat: int, target_seat: int) -> None:
+async def submit_assassination(game_id: UUID, seat: int, target_seats: list[int]) -> None:
     pool = await get_pool()
-    await pool.execute("SELECT sp_submit_assassination($1,$2,$3)", game_id, seat, target_seat)
+    await pool.execute("SELECT sp_submit_assassination($1,$2,$3)", game_id, seat, target_seats)
 
 
 async def load_game_state_for_seat(game_id: UUID, seat: int | None) -> dict[str, Any] | None:
@@ -167,8 +170,10 @@ async def load_game_state_for_seat(game_id: UUID, seat: int | None) -> dict[str,
         ],
         "winner": g["winner"],
         "winReason": g["win_reason"],
-        "assassinationTarget": g["assassination_target"],
+        "assassinationTargets": g["assassination_target"] or [],
         "hasAssassin": bool(settings.get("assassin")),
+        "hasGawain": bool(settings.get("gawain")),
+        "hasTristanIseult": bool(settings.get("tristanIseult")),
         "hasLadyOfLake": bool(settings.get("ladyOfLake")),
         "hasExcalibur": bool(settings.get("excalibur")),
         "hasLancelot": bool(settings.get("lancelot")),
@@ -299,24 +304,31 @@ async def load_game_state_for_seat(game_id: UUID, seat: int | None) -> dict[str,
 
             if settings.get("excalibur"):
                 if g["phase"] == "excalibur_decision" and g["excalibur_holder_seat"] == seat:
-                    # The one deliberate exception to card secrecy in the
-                    # whole game: the holder must see everyone's actual
-                    # submitted card to decide who (if anyone) to change.
-                    participant_cards = await pool.fetch(
-                        """SELECT seat, success, reversed FROM mission_cards
-                             WHERE game_id = $1 AND mission_number = $2 AND seat = ANY($3)
-                             ORDER BY seat""",
-                        game_id,
-                        g["mission_number"],
-                        g["proposed_team"],
-                    )
-                    you["excaliburParticipants"] = [
-                        {"seat": r["seat"], "success": r["success"], "reversed": r["reversed"]}
-                        for r in participant_cards
-                    ]
+                    # The holder doesn't get to browse every card -- they
+                    # pick one participant (sp_excalibur_view) and only that
+                    # one's real card is ever exposed here, once it's been
+                    # picked. Before picking, the frontend only needs the
+                    # public proposedTeam seats to offer as choices.
+                    if g["excalibur_viewing_seat"] is not None:
+                        viewed = await pool.fetchrow(
+                            """SELECT seat, success, reversed FROM mission_cards
+                                 WHERE game_id = $1 AND mission_number = $2 AND seat = $3""",
+                            game_id,
+                            g["mission_number"],
+                            g["excalibur_viewing_seat"],
+                        )
+                        if viewed is not None:
+                            you["excaliburViewing"] = {
+                                "targetSeat": viewed["seat"],
+                                "success": viewed["success"],
+                                "reversed": viewed["reversed"],
+                            }
 
-                # Forever after, too: "only the Excalibur holder and the
-                # targeted individual know what the original vote was."
+                # Forever after, too: the target's original card value stays
+                # private to the holder and the target themselves -- both
+                # legitimately already know it (the holder because they
+                # viewed it, the target because they're the one who played
+                # it) regardless of whether it ended up getting swapped.
                 you["excaliburReveals"] = [
                     {
                         "missionNumber": e["mission_number"],
@@ -324,10 +336,11 @@ async def load_game_state_for_seat(game_id: UUID, seat: int | None) -> dict[str,
                         "originalSuccess": e["original_success"],
                         "originalReversed": e["original_reversed"],
                         "newSuccess": e["new_success"],
+                        "used": e["used"],
                         "wasHolder": e["holder_seat"] == seat,
                     }
                     for e in excalibur_event_rows
-                    if e["used"] and (e["holder_seat"] == seat or e["target_seat"] == seat)
+                    if e["holder_seat"] == seat or e["target_seat"] == seat
                 ]
 
             base["you"] = you

@@ -212,12 +212,14 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         await game_db.reveal_arthur(room.game_id, player.seat_index)
         await broadcast_room(room)
 
+    async def handle_excalibur_view(room: Room, player, data: dict[str, Any]) -> None:
+        await game_db.excalibur_view(room.game_id, player.seat_index, int(data.get("targetSeat")))
+        await broadcast_room(room)
+
     async def handle_excalibur_decision(room: Room, player, data: dict[str, Any]) -> None:
-        target_seat_raw = data.get("targetSeat")
-        target_seat = int(target_seat_raw) if target_seat_raw is not None else None
         new_success_raw = data.get("newSuccess")
         new_success = bool(new_success_raw) if new_success_raw is not None else None
-        await game_db.excalibur_decision(room.game_id, player.seat_index, bool(data.get("use")), target_seat, new_success)
+        await game_db.excalibur_decision(room.game_id, player.seat_index, bool(data.get("use")), new_success)
         await broadcast_room(room)
 
     async def handle_use_lady_of_lake(room: Room, player, data: dict[str, Any]) -> None:
@@ -225,7 +227,9 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         await broadcast_room(room)
 
     async def handle_submit_assassination(room: Room, player, data: dict[str, Any]) -> None:
-        await game_db.submit_assassination(room.game_id, player.seat_index, int(data.get("targetSeat")))
+        targets_raw = data.get("targetSeats")
+        targets = [int(s) for s in targets_raw] if isinstance(targets_raw, list) else []
+        await game_db.submit_assassination(room.game_id, player.seat_index, targets)
         await broadcast_room(room)
 
     async def handle_chat_send(room: Room, player, data: dict[str, Any]) -> None:
@@ -265,6 +269,7 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
     sio.on("game:submitTeamVote", with_room(handle_submit_team_vote))
     sio.on("game:submitMissionVote", with_room(handle_submit_mission_vote))
     sio.on("game:revealArthur", with_room(handle_reveal_arthur))
+    sio.on("game:excaliburView", with_room(handle_excalibur_view))
     sio.on("game:excaliburDecision", with_room(handle_excalibur_decision))
     sio.on("game:useLadyOfLake", with_room(handle_use_lady_of_lake))
     sio.on("game:submitAssassination", with_room(handle_submit_assassination))
