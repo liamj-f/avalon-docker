@@ -8,7 +8,7 @@ export default function AssassinPanel({ room, onAssassinate }) {
 
   return (
     <div className="phase-panel">
-      <h2 className="phase-title">Good has won 3 missions — but the Assassin gets one shot</h2>
+      <h2 className="phase-title">Good has won 3 quests — but the Assassin gets one shot</h2>
       <p className="phase-lead">
         {isAssassin
           ? 'Choose who you believe is Merlin. Guess correctly and Evil steals the win.'
