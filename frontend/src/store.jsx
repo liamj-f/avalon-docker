@@ -94,8 +94,8 @@ function useMemoActions(dispatch) {
     socket.emit('room:leave', {});
     dispatch({ type: 'LEFT' });
   }, [dispatch]);
-  const proposeTeam = useCallback((seats) => {
-    socket.emit('game:proposeTeam', { seats });
+  const proposeTeam = useCallback((seats, excaliburSeat) => {
+    socket.emit('game:proposeTeam', { seats, excaliburSeat });
   }, []);
   const submitTeamVote = useCallback((approve) => {
     socket.emit('game:submitTeamVote', { approve });
@@ -112,8 +112,8 @@ function useMemoActions(dispatch) {
   const useLadyOfLake = useCallback((targetSeat) => {
     socket.emit('game:useLadyOfLake', { targetSeat });
   }, []);
-  const submitExcaliburDecision = useCallback((use) => {
-    socket.emit('game:excaliburDecision', { use });
+  const submitExcaliburDecision = useCallback((use, targetSeat, newSuccess) => {
+    socket.emit('game:excaliburDecision', { use, targetSeat, newSuccess });
   }, []);
   const setRolePreference = useCallback((key, want) => {
     socket.emit('room:setRolePreference', { key, want });

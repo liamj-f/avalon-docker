@@ -33,6 +33,12 @@ export default function VoteHistory({ room }) {
             </div>
             <p className="vote-history-team">
               <strong>{nameFor(entry.leaderSeat)}</strong> proposed: {entry.team.map(nameFor).join(', ')}
+              {entry.excaliburSeat != null && (
+                <>
+                  {' '}
+                  &middot; ⚔️ Excalibur to <strong>{nameFor(entry.excaliburSeat)}</strong>
+                </>
+              )}
             </p>
             <div className="vote-history-votes">
               {entry.votes.map((v) => (
