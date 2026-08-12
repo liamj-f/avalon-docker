@@ -54,8 +54,25 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  row-gap: 8px;
   padding: 16px 24px;
   border-bottom: 1px solid var(--card-border);
+  /* Sticky (not the old floating position:fixed tab elsewhere) so the
+     role-reveal pill below stays reachable without scrolling back up, but
+     as part of the normal header row -- it can never overlap page content
+     the way a viewport-pinned element with no knowledge of the layout
+     could. Solid background since content now scrolls underneath it. */
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--bg);
+}
+
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .brand {
@@ -1161,18 +1178,15 @@ button.mission-pip:hover {
   font-size: 0.85rem;
 }
 
-.role-reveal-tab {
-  position: fixed;
-  top: 70px;
-  right: 20px;
+.header-role-tab {
   background: var(--card);
   border: 1px solid var(--gold);
   color: var(--text);
   border-radius: 999px;
-  padding: 8px 16px;
+  padding: 4px 14px;
   cursor: pointer;
-  z-index: 40;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
 }
 
 .game-sidebar {
