@@ -102,7 +102,7 @@ export const EXTENSION_TOGGLES = [
     key: 'excalibur',
     name: 'Excalibur',
     description:
-      'A Good player starts holding the sword. Once per game, if a mission they’re not necessarily on comes back with at least one Fail, they may use Excalibur to cleanse one Fail into a Success.',
+      'Each team’s leader hands Excalibur to someone else on that team before the vote — everyone sees who. Once the quest’s cards are in, the holder sees every real card and may flip exactly one player’s card, once per game.',
   },
 ];
 

@@ -5,10 +5,17 @@ export default function VotePanel({ room, onVote }) {
   const { game, players, you } = room;
   const proposedSet = new Set(game.proposedTeam);
   const leader = players.find((p) => p.seat === game.leaderSeat);
+  const excaliburHolder = game.hasExcalibur && !game.excaliburUsed && players.find((p) => p.seat === game.excaliburHolderSeat);
 
   return (
     <div className="phase-panel">
       <h2 className="phase-title">Vote on {leader?.displayName}&rsquo;s proposed team</h2>
+
+      {excaliburHolder && (
+        <p className="hint">
+          ⚔️ If this team is approved, <strong>{excaliburHolder.displayName}</strong> will hold Excalibur for this quest.
+        </p>
+      )}
 
       <div className="avatar-grid">
         {players.map((p) => (

@@ -193,7 +193,9 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
     async def handle_propose_team(room: Room, player, data: dict[str, Any]) -> None:
         seats_raw = data.get("seats")
         seats = [int(s) for s in seats_raw] if isinstance(seats_raw, list) else []
-        await game_db.propose_team(room.game_id, player.seat_index, seats)
+        excalibur_seat_raw = data.get("excaliburSeat")
+        excalibur_seat = int(excalibur_seat_raw) if excalibur_seat_raw is not None else None
+        await game_db.propose_team(room.game_id, player.seat_index, seats, excalibur_seat)
         await broadcast_room(room)  # NOTIFY will also fire; this just keeps the actor's own UI snappy
 
     async def handle_submit_team_vote(room: Room, player, data: dict[str, Any]) -> None:
@@ -211,7 +213,11 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         await broadcast_room(room)
 
     async def handle_excalibur_decision(room: Room, player, data: dict[str, Any]) -> None:
-        await game_db.excalibur_decision(room.game_id, player.seat_index, bool(data.get("use")))
+        target_seat_raw = data.get("targetSeat")
+        target_seat = int(target_seat_raw) if target_seat_raw is not None else None
+        new_success_raw = data.get("newSuccess")
+        new_success = bool(new_success_raw) if new_success_raw is not None else None
+        await game_db.excalibur_decision(room.game_id, player.seat_index, bool(data.get("use")), target_seat, new_success)
         await broadcast_room(room)
 
     async def handle_use_lady_of_lake(room: Room, player, data: dict[str, Any]) -> None:
