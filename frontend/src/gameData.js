@@ -117,12 +117,16 @@ export const EXTENSION_TOGGLES = [
 // Purely cosmetic flavor for each of the 5 quests, in the order requested --
 // a loose Arthurian arc from gathering the company through to the isle
 // where the legend ends. Indexed 0-4 to match game.missionNumber directly.
+// `theme` keys a background motif (see QuestThemeArt.jsx) applied to the
+// whole page while that quest is current, and to the quest-result modal
+// for whichever quest it's displaying -- purely decorative, never the
+// source of truth for anything (missionNumber already is).
 export const QUEST_FLAVOR = [
-  { name: 'The Round Table', blurb: 'The knights gather to choose who rides out first.' },
-  { name: 'Camelot', blurb: "Word of the quest's early turns spreads through the court." },
-  { name: 'The Holy Grail', blurb: 'The company presses on toward its most sacred goal.' },
-  { name: 'Camlann', blurb: 'Old loyalties fracture on the field where legends end.' },
-  { name: 'The Isle of Avalon', blurb: 'The final crossing — where the truth is finally laid bare.' },
+  { name: 'The Round Table', blurb: 'The knights gather to choose who rides out first.', theme: 'round-table' },
+  { name: 'Camelot', blurb: "Word of the quest's early turns spreads through the court.", theme: 'camelot' },
+  { name: 'The Holy Grail', blurb: 'The company presses on toward its most sacred goal.', theme: 'holy-grail' },
+  { name: 'Camlann', blurb: 'Old loyalties fracture on the field where legends end.', theme: 'camlann' },
+  { name: 'The Isle of Avalon', blurb: 'The final crossing — where the truth is finally laid bare.', theme: 'isle-of-avalon' },
 ];
 
 export function validateSettingsClient(playerCount, settings) {
