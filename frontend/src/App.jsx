@@ -4,8 +4,9 @@ import Home from './pages/Home.jsx';
 import Lobby from './pages/Lobby.jsx';
 import Game from './pages/Game.jsx';
 import RoleCard from './components/RoleCard.jsx';
+import QuestThemeArt from './components/QuestThemeArt.jsx';
 import PwaUpdatePrompt from './PwaUpdatePrompt.jsx';
-import { ROLE_TOGGLES, EXTENSION_TOGGLES } from './gameData.js';
+import { ROLE_TOGGLES, EXTENSION_TOGGLES, QUEST_FLAVOR } from './gameData.js';
 
 const DEFAULT_ROSTER_TEXT = 'Merlin · Percival · Morgana · Mordred · Oberon · Assassin · Tristan & Iseult';
 const FULL_ROSTER = [...ROLE_TOGGLES, ...EXTENSION_TOGGLES];
@@ -55,8 +56,15 @@ export default function App() {
     prevPhase.current = room?.phase;
   }, [room?.phase]);
 
+  // Same clamp Game.jsx uses for the "Quest N of 5" line -- holds on the
+  // 5th quest's theme once missionNumber ticks past it at game end, rather
+  // than reading past the end of QUEST_FLAVOR.
+  const questTheme =
+    room?.phase === 'in_game' ? QUEST_FLAVOR[Math.min(room.game.missionNumber, 4)].theme : null;
+
   return (
     <div className="app-shell">
+      {questTheme && <QuestThemeArt theme={questTheme} variant="page" />}
       <header className="app-header">
         <div className="brand">
           <span className="brand-icon" aria-hidden="true">
