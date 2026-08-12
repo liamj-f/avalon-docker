@@ -644,6 +644,42 @@ still its own small badge absolutely positioned above the circle
 it, so a leader's seat icon and their "you're the leader" marker both stay
 independently readable. The display name underneath is unchanged.
 
+### Design note: Quest-themed backgrounds
+
+The quest flavor names were originally just text. `QuestThemeArt.jsx` adds
+a matching mood to go with each one: a low-opacity, hand-drawn line-art
+motif plus a faint color tint, both keyed off the same `theme` slug now
+attached to each `QUEST_FLAVOR` entry — a ring of seats around a table for
+the Round Table, a castle skyline for Camelot, a chalice with radiating
+light for the Holy Grail, crossed swords over a fracture line (tinted red)
+for Camlann, and a moon over misty water for the Isle of Avalon. Everything
+is inline SVG using `currentColor`, so one CSS custom property
+(`--quest-tint`, set per `.quest-theme-<slug>` class) drives both the
+line art's color and a matching radial-gradient wash — no image files to
+ship, fetch, or ever 404.
+
+Two independent placements, both driven by the same component with a
+`variant` prop:
+- **`variant="page"`**: `App.jsx` renders this fixed behind the entire app
+  whenever `room.phase === 'in_game'`, keyed off the *current*
+  `game.missionNumber` (same clamp-to-4 `Game.jsx` already uses for the
+  "Quest N of 5" line, so it holds on the 5th quest's theme through the
+  end screen rather than reading past the end of `QUEST_FLAVOR`). This is
+  the "whole page changes with the quest" effect.
+- **`variant="modal"`**: `QuestResultModal.jsx` renders this inside the
+  modal card itself, keyed off `result.missionNumber` — i.e. *that
+  specific quest's* theme, not whatever's currently active. Reopening an
+  old quest 1 result while the page is on quest 5's theme correctly shows
+  Round Table art in the popup with Isle of Avalon still visible on the
+  page behind it — the two are intentionally independent, not synced.
+
+Legibility was the hard constraint the whole time: opacity stays low
+(0.1–0.14 for the line art, ~0.14 for the tint wash) and everything sits
+at `z-index: -1` (page) or behind the modal's own content via a `position:
+relative; z-index: 1` bump on the modal's real children (`z-index: 0` for
+the art layer) — text contrast is untouched by design, this is mood, not
+a new information channel.
+
 ## Verification
 
 No live Docker registry was reachable in the dev sandbox this was built in
@@ -815,6 +851,20 @@ against a real local Postgres 16 and the real backend process (not mocks):
   new seat icons render distinctly per seat, stay stable across a phase
   change, and that a leader's crown badge sits cleanly separate from their
   seat icon rather than overlapping or replacing it.
+- **Quest-themed page/popup backgrounds, visually**: forced
+  `games.mission_number` through all 5 values directly via `psql` (each
+  followed by its own `pg_notify`, same as every other forced-state test
+  here) and screenshotted the full page at each, confirming the page-level
+  art and tint actually change with the quest — the Round Table's ring of
+  seats, Camelot's towers, the Holy Grail's chalice and rays, Camlann's
+  crossed swords with a visibly red-tinted wash, and the Isle of Avalon's
+  moon and water — all while every panel's text stayed fully legible
+  throughout (the actual bar this had to clear). Also specifically tested
+  the two placements' independence: with the page sitting on quest 5's
+  theme, inserted and reopened a resolved quest 1 result and confirmed the
+  popup showed Round Table art while the Isle of Avalon motif remained
+  visible on the page behind it, unsynced — proving the modal always
+  reflects *the quest it's displaying*, not whatever's currently active.
 - **Multi-arch publishing + the external-Postgres compose file**: the
   workflow YAML parses and `docker compose -f docker-compose.external-db.yml
   config` resolves correctly with `DB_HOST`/`POSTGRES_*` set (producing the

@@ -1,5 +1,6 @@
 import React from 'react';
 import { QUEST_FLAVOR } from '../gameData.js';
+import QuestThemeArt from './QuestThemeArt.jsx';
 
 /**
  * Full detail for one resolved quest -- the raw success/fail/reverse card
@@ -24,6 +25,7 @@ export default function QuestResultModal({ result, players, onClose }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className={`modal quest-result-modal quest-result-${result.result}`} onClick={(e) => e.stopPropagation()}>
+        <QuestThemeArt theme={QUEST_FLAVOR[result.missionNumber].theme} variant="modal" />
         <p className="hint">
           Quest {result.missionNumber + 1}: {QUEST_FLAVOR[result.missionNumber].name} — result
         </p>
