@@ -372,37 +372,50 @@ are told each other's identity at the start of the game (see
 `compute_knowledge` in `backend/src/game/roles.py`). If you'd prefer a variant
 where one of them can secretly be Evil, that function is the place to change it.
 
-### Design note: Gawain & the Assassin's targets
+### Design note: Gawain & the Assassin's three modes
 
 Originally the Assassin had exactly one way to win: name Merlin correctly.
-`005_excalibur_view_and_assassin_rework.sql` adds two more routes, alongside
-that one, without changing what "one shot" means — a single
-`sp_submit_assassination` call, naming either 1 or 2 seats:
+The real mechanic is a genuine three-way choice, and Evil only wins if the
+guess matches the *chosen mode's* win condition exactly — not "any correct
+name wins," but "commit to a shape, then match it precisely."
+`005_excalibur_view_and_assassin_rework.sql` and
+`006_assassin_pass_mode.sql` implement all three as one
+`sp_submit_assassination` call, distinguished purely by how many seats are
+named (0, 1, or 2):
 
-- **Gawain** (`GAWAIN` in `roles.py`) is a new plain Good role with no
-  special knowledge of his own — his only mechanical purpose is being a
-  second name the Assassin can win by guessing, alongside Merlin. Both can
-  be in play at once (nothing stops it); naming *either* seat wins for
-  Evil. This also means the Assassin no longer strictly requires Merlin —
-  a table could run Gawain (or the pair, below) as Merlin's sole
-  replacement for a harder, magic-free variant, or stack multiple routes
-  for a different kind of tension. `validate_settings` now requires *at
-  least one* of Merlin/Gawain/the Tristan & Iseult pair to be in play
-  whenever the Assassin is, rather than hard-requiring Merlin specifically.
-- **The Tristan & Iseult pair**: naming *both* correctly (in the same
-  assassination call) also wins for Evil — proof the Assassin cracked the
+- **Guess Merlin** (name exactly 1 seat): correct if it's Merlin, **or**
+  Gawain if he's in play. **Gawain (`GAWAIN` in `roles.py`) only ever wins
+  in this single-target mode** — a plain Good role with no special
+  knowledge of his own, whose sole mechanical purpose is being a second
+  acceptable answer here, never a valid answer in the pair mode below.
+  Both Merlin and Gawain can be in play at once; naming *either* seat
+  wins for Evil in this mode. This also means the Assassin no longer
+  strictly requires Merlin — a table could run Gawain (or the pair, below)
+  as Merlin's sole replacement for a harder, magic-free variant.
+  `validate_settings` requires *at least one* of Merlin/Gawain/the Tristan
+  & Iseult pair to be in play whenever the Assassin is, rather than
+  hard-requiring Merlin specifically.
+- **Guess the Lovers** (name exactly 2 seats): correct only if they're
+  exactly `{tristan_seat, iseult_seat}` — proof the Assassin cracked the
   secret couple, not just got lucky on one of two Loyal Servants. Naming
   only one of them (with or without a second, wrong, decoy) does **not**
-  win; `sp_submit_assassination` checks the submitted seat set is exactly
-  `{tristan_seat, iseult_seat}`, no more, no less.
+  win.
+- **Pass** (name nobody): always resolves as Good's win, immediately, with
+  nothing revealed — no card is checked against anyone, and nobody gets
+  marked `was_assassinated`. This is a real third choice, not just "an
+  incorrect guess by omission": passing is distinguishable in the final
+  reveal (nobody flagged "Assassinated") from a wrong guess (the wrongly
+  named seat(s) *are* flagged, even though the outcome — Good wins either
+  way — is identical). Without it, the Assassin was forced to name someone
+  even when they had no real belief, just to formally decline.
 
-The frontend's `AssassinPanel` reflects this: it's a 1-target picker unless
-Tristan & Iseult are both in play, in which case up to 2 seats can be
-selected (selecting a 3rd bumps the oldest pick, so there's no dead end),
-and the submit button's label changes between "name your guess" and "name
-Tristan & Iseult" based on the count. `EndScreen` names whoever was
-guessed and says whether it was correct, without hard-coding which route
-was actually used — one message covers all three.
+The frontend's `AssassinPanel` mirrors all three: 1-target picker unless
+Tristan & Iseult are both in play (then up to 2, selecting a 3rd bumps the
+oldest pick so there's no dead end), plus an always-available "Pass" button
+that submits zero targets regardless of the current selection. `EndScreen`
+handles all three outcomes with one generic message — names whoever was
+guessed and says whether it was correct, or says the Assassin passed —
+without hard-coding which mode was actually used.
 
 ### Design note: Lady of the Lake
 
@@ -646,13 +659,18 @@ against a real local Postgres 16 and the real backend process (not mocks):
   explicitly converting the Reverse card to Success/Fail (the quest
   resolves on that real tally directly, no double-flip) — confirming the
   required "Lancelot's reverse evaluates after Excalibur's swap" ordering.
-- **Gawain & the Assassin's alternate targets**: verified with forced roles
+- **Gawain & the Assassin's three modes**: verified with forced roles
   (again via `psql`, since a specific role landing on a specific seat isn't
   reachable through normal random dealing) — naming Gawain instead of
   Merlin correctly wins for Evil; naming both Tristan and Iseult correctly
   wins for Evil (`assassinationTargets` comes back as both seats); naming
-  only one of the pair plus an unrelated decoy seat does **not** win. This
-  round also caught and fixed a real bug the hard way: the pair-guess
+  only one of the pair plus an unrelated decoy seat does **not** win; and
+  passing (naming nobody) always resolves as Good's win with
+  `assassinationTargets` empty and zero `game_players` rows flagged
+  `was_assassinated` (confirmed directly against Postgres, not just the
+  socket-visible state) — distinguishing it from a wrong guess, which
+  *does* flag the named seat(s) even though both outcomes are a Good win.
+  This round also caught and fixed a real bug the hard way: the pair-guess
   comparison (`p_target_seats <@ ARRAY[tristan_seat, iseult_seat]`) failed
   every single time with a Postgres "operator does not exist" error because
   the two sides were different array element types (`INT[]` vs implicit
@@ -741,6 +759,11 @@ against a real local Postgres 16 and the real backend process (not mocks):
   `pg_notify` the way the real stored procedures do, so a manually-forced
   phase change needs an explicit follow-up `SELECT pg_notify(...)` to
   actually reach a connected browser.
+- **Assassin's Pass mode, visually**: same Playwright approach —
+  screenshotted the Assassin panel showing the "🏳️ Pass — let Good's win
+  stand" button alongside the guess button, then clicked it and confirmed
+  the end screen reads "Good wins! The Assassin passed — Good's win
+  stands." with no one flagged "Assassinated" in the reveal.
 - **Multi-arch publishing + the external-Postgres compose file**: the
   workflow YAML parses and `docker compose -f docker-compose.external-db.yml
   config` resolves correctly with `DB_HOST`/`POSTGRES_*` set (producing the
