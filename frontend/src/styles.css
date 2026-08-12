@@ -387,6 +387,11 @@ button {
   border-radius: 10px;
   padding: 10px;
   color: var(--text);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.role-toggle:hover {
+  border-color: var(--text-dim);
 }
 
 .role-toggle-main {
@@ -413,6 +418,79 @@ button {
 .role-toggle.active {
   border-color: var(--gold);
   box-shadow: 0 0 0 1px var(--gold) inset;
+  background: rgba(217, 180, 100, 0.08);
+}
+
+/* Active state is team-tinted where we know the team, rather than always
+   gold -- makes the whole grid scannable as "what's in play, and which
+   side is it on" at a glance instead of everyone getting the same highlight. */
+.role-toggle-good.active {
+  border-color: var(--good);
+  box-shadow: 0 0 0 1px var(--good) inset;
+  background: var(--good-bg);
+}
+
+.role-toggle-evil.active {
+  border-color: var(--evil);
+  box-shadow: 0 0 0 1px var(--evil) inset;
+  background: var(--evil-bg);
+}
+
+.role-toggle-mixed.active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold) inset;
+  background: linear-gradient(90deg, var(--good-bg) 50%, var(--evil-bg) 50%);
+}
+
+.role-toggle-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 30px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--card-border);
+  transition: background 0.15s ease;
+}
+
+.role-toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.role-toggle-switch-on {
+  background: var(--gold);
+}
+
+.role-toggle-switch-on::after {
+  transform: translateX(14px);
+  background: #26200f;
+}
+
+.role-toggle-good .role-toggle-switch-on {
+  background: var(--good);
+}
+
+.role-toggle-good .role-toggle-switch-on::after {
+  background: #0c1830;
+}
+
+.role-toggle-evil .role-toggle-switch-on {
+  background: var(--evil);
+}
+
+.role-toggle-evil .role-toggle-switch-on::after {
+  background: #2a0d0d;
+}
+
+.role-toggle-name {
+  font-weight: 600;
 }
 
 .vote-pill {
@@ -447,9 +525,13 @@ button {
 
 .role-toggle-head {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 8px;
   font-weight: 600;
+}
+
+.role-toggle-head .role-toggle-name {
+  flex: 1;
 }
 
 .team-chip {

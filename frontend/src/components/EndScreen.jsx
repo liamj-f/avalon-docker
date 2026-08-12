@@ -4,7 +4,6 @@ import { useGame } from '../store.jsx';
 const REASON_TEXT = {
   missions: 'by winning three quests',
   vote_track: 'because five team proposals were rejected in a row',
-  assassination: 'the Assassin correctly identified Merlin',
 };
 
 export default function EndScreen({ room }) {
@@ -13,12 +12,18 @@ export default function EndScreen({ room }) {
   const winnerLabel = game.winner === 'good' ? 'Good' : 'Evil';
   const reasonText = REASON_TEXT[game.winReason] || '';
 
+  const targetSeats = game.assassinationTargets || [];
+  const targetNames = targetSeats.map((s) => players.find((p) => p.seat === s)?.displayName).join(' & ');
+  const guessedThePair = targetSeats.length === 2;
+
   return (
     <div className="phase-panel end-screen">
       <h2 className={`end-title end-title-${game.winner}`}>{winnerLabel} wins!</h2>
       <p className="phase-lead">
         {game.winReason === 'assassination'
-          ? `The Assassin ${game.winner === 'evil' ? 'correctly named' : 'failed to name'} Merlin.`
+          ? `The Assassin named ${targetNames}${guessedThePair ? ' as Tristan & Iseult' : ''} — ${
+              game.winner === 'evil' ? 'correct!' : 'incorrect.'
+            }`
           : `Victory ${reasonText}.`}
       </p>
 
@@ -26,7 +31,7 @@ export default function EndScreen({ room }) {
       <ul className="reveal-list">
         {game.reveal.map((r) => {
           const player = players.find((p) => p.seat === r.seat);
-          const isAssassinTarget = game.assassinationTarget === r.seat;
+          const isAssassinTarget = targetSeats.includes(r.seat);
           return (
             <li key={r.seat} className={`reveal-row reveal-${r.team}`}>
               <span className="reveal-name">

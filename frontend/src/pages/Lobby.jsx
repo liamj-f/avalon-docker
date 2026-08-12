@@ -33,11 +33,13 @@ export default function Lobby() {
   const renderToggleGroup = (items) =>
     items.map((r) => {
       const tally = rolePreferenceTally[r.key] || { count: 0, you: false };
+      const active = !!settings[r.key];
       return (
-        <div key={r.key} className={`role-toggle role-toggle-${r.team || 'neutral'} ${settings[r.key] ? 'active' : ''}`}>
+        <div key={r.key} className={`role-toggle role-toggle-${r.team || 'neutral'} ${active ? 'active' : ''}`}>
           <button type="button" className="role-toggle-main" onClick={() => toggleSetting(r.key)} disabled={!you?.isHost}>
             <div className="role-toggle-head">
-              <span>{r.name}</span>
+              <span className={`role-toggle-switch ${active ? 'role-toggle-switch-on' : ''}`} aria-hidden="true" />
+              <span className="role-toggle-name">{r.name}</span>
               {r.team && <span className={`team-chip team-chip-${r.team}`}>{r.team}</span>}
             </div>
             <p>{r.description}</p>
