@@ -409,12 +409,18 @@ named (0, 1, or 2):
   way — is identical). Without it, the Assassin was forced to name someone
   even when they had no real belief, just to formally decline.
 
-The frontend's `AssassinPanel` mirrors all three: 1-target picker unless
-Tristan & Iseult are both in play (then up to 2, selecting a 3rd bumps the
-oldest pick so there's no dead end), plus an always-available "Pass" button
-that submits zero targets regardless of the current selection. `EndScreen`
-handles all three outcomes with one generic message — names whoever was
-guessed and says whether it was correct, or says the Assassin passed —
+The frontend's `AssassinPanel` mirrors all three, and makes the mode an
+explicit, named choice rather than something implied by how many avatars
+happen to be clicked: when Tristan & Iseult are both in play, two labeled
+cards ("Guess Merlin — name 1 player" / "Guess the Lovers — name exactly
+2 — must be Tristan & Iseult") sit above the player grid, and picking one
+sets that mode's required count, clearing any in-progress selection from
+the other mode so a stale pick can't carry over. When the pair isn't in
+play there's only ever one mode, so the cards don't show — just the plain
+"select 1 player" picker. A "Pass" button is always available regardless
+of mode, submitting zero targets. `EndScreen` handles all three outcomes
+with one generic message — names whoever was guessed and says whether it
+was correct, or says the Assassin passed —
 without hard-coding which mode was actually used.
 
 ### Design note: Lady of the Lake
@@ -764,6 +770,17 @@ against a real local Postgres 16 and the real backend process (not mocks):
   stand" button alongside the guess button, then clicked it and confirmed
   the end screen reads "Good wins! The Assassin passed — Good's win
   stands." with no one flagged "Assassinated" in the reveal.
+- **Assassin's explicit mode picker, visually**: confirmed the "Guess
+  Merlin" / "Guess the Lovers" cards don't render at all when Tristan &
+  Iseult aren't in play (single implicit mode, matching the plain
+  "select 1 player" hint text with a Gawain mention); confirmed they do
+  render, side by side with live descriptions, when the pair is in play;
+  clicked into Lovers mode and confirmed selecting Bob and Cara (Tristan
+  and Iseult) submits and correctly wins for Evil; and confirmed switching
+  from a 1-target selection in Merlin mode over to Lovers mode clears the
+  in-progress pick (checked the DOM directly for zero `.avatar-selected`
+  elements immediately after the mode switch) rather than silently
+  carrying over a now-invalid selection.
 - **Multi-arch publishing + the external-Postgres compose file**: the
   workflow YAML parses and `docker compose -f docker-compose.external-db.yml
   config` resolves correctly with `DB_HOST`/`POSTGRES_*` set (producing the
