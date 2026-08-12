@@ -1,4 +1,5 @@
 import React from 'react';
+import { QUEST_FLAVOR } from '../gameData.js';
 
 export default function MissionTrack({ game, onSelectQuest }) {
   const { teamSizes, failsRequired, missionResults, missionNumber, rejectionCount } = game;
@@ -13,7 +14,7 @@ export default function MissionTrack({ game, onSelectQuest }) {
           if (result) cls += result.result === 'success' ? ' pip-success' : ' pip-fail';
           else if (isCurrent) cls += ' pip-current';
 
-          const title = `Quest ${i + 1}: ${size} players, ${failsRequired[i]} fail(s) needed${
+          const title = `Quest ${i + 1}: ${QUEST_FLAVOR[i].name} — ${size} players, ${failsRequired[i]} fail(s) needed${
             result ? ' — click to see the result' : ''
           }`;
 

@@ -13,6 +13,7 @@ import ArthurReveal from '../components/ArthurReveal.jsx';
 import Chat from '../components/Chat.jsx';
 import VoteHistory from '../components/VoteHistory.jsx';
 import QuestResultModal from '../components/QuestResultModal.jsx';
+import { QUEST_FLAVOR } from '../gameData.js';
 
 const PHASE_LABEL = {
   team_building: 'Team Building',
@@ -33,6 +34,7 @@ export default function Game() {
     submitAssassination,
     revealArthur,
     useLadyOfLake,
+    submitExcaliburView,
     submitExcaliburDecision,
   } = useGame();
   const { room } = state;
@@ -78,7 +80,9 @@ export default function Game() {
         <div className="card">
           <div className="phase-badge-row">
             <span className="phase-badge">{PHASE_LABEL[game.phase]}</span>
-            <span className="hint">Quest {Math.min(game.missionNumber + 1, 5)} of 5</span>
+            <span className="hint" title={QUEST_FLAVOR[Math.min(game.missionNumber, 4)].blurb}>
+              Quest {Math.min(game.missionNumber + 1, 5)} of 5 · {QUEST_FLAVOR[Math.min(game.missionNumber, 4)].name}
+            </span>
           </div>
           <MissionTrack game={game} onSelectQuest={setOpenQuestNumber} />
           {(ladyHolder || excaliburHolder) && (
@@ -116,7 +120,7 @@ export default function Game() {
           {game.phase === 'mission' && <MissionPanel room={viewRoom} onPlayCard={submitMissionVote} />}
           {game.phase === 'lady_of_lake' && <LadyOfLakePanel room={viewRoom} onUse={useLadyOfLake} />}
           {game.phase === 'excalibur_decision' && (
-            <ExcaliburPanel room={viewRoom} onDecide={submitExcaliburDecision} />
+            <ExcaliburPanel room={viewRoom} onView={submitExcaliburView} onDecide={submitExcaliburDecision} />
           )}
           {game.phase === 'assassination' && <AssassinPanel room={viewRoom} onAssassinate={submitAssassination} />}
           {game.phase === 'game_over' && <EndScreen room={viewRoom} />}

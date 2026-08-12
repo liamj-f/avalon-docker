@@ -14,16 +14,21 @@ of truth for every game in progress — not just a history log.
 - **Host transfer**: the host can hand host duties to any other connected
   player at any point before the game starts.
 - **Full character set**: Merlin, Percival, Morgana, Mordred, Oberon, Assassin,
-  Tristan & Iseult, Agravain, Arthur, and Lancelot (solo, or the Good/Evil
-  Lancelot pair + Guinevere), on top of the base Loyal Servant of Arthur /
-  Minion of Mordred roles. Supports 5–10 players with the standard Avalon
-  mission/fail tables.
+  Tristan & Iseult, Agravain, Arthur, Gawain, and Lancelot (solo, or the
+  Good/Evil Lancelot pair + Guinevere), on top of the base Loyal Servant of
+  Arthur / Minion of Mordred roles. Supports 5–10 players with the standard
+  Avalon mission/fail tables. The Assassin can win by correctly naming
+  Merlin, Gawain, or the secret Tristan & Iseult pair — see the design note
+  below.
 - **Extensions**: **Lady of the Lake** (checks a player's loyalty after
   missions 2/3/4, then passes to whoever was examined) and **Excalibur**
   (each quest's leader hands it to someone else on that team before the
-  vote; once the quest's cards are in, the holder sees every real card and
-  may flip exactly one player's, once per game), both toggleable from the
-  lobby alongside the core roles.
+  vote; once the quest's cards are in, the holder picks one participant to
+  see their real card, then may flip it, once per game), both toggleable
+  from the lobby alongside the core roles.
+- **Arthurian quest flavor**: each of the 5 quests carries a themed name —
+  The Round Table, Camelot, The Holy Grail, Camlann, The Isle of Avalon —
+  shown next to the quest counter and on its result.
 - **Real-time gameplay** over WebSockets (Socket.IO): team building, public
   team votes, secret mission cards, the assassination phase, and a full
   role-reveal at game end.
@@ -44,7 +49,8 @@ of truth for every game in progress — not just a history log.
   popup announces each quest's outcome the moment it resolves, with the raw
   Success/Fail/Reverse card breakdown submitted — separate from the
   (possibly Excalibur-changed) effective result — plus who held Excalibur
-  that quest, whether it was used, and on whom. Every resolved quest's pip
+  that quest, who they viewed, and whether they used it on them. Every
+  resolved quest's pip
   on the mission track stays clickable for the rest of the game to reopen
   that same detail, so dismissing the popup doesn't lose it. Never forces a
   reload mid-decision; it's purely informational.
@@ -338,11 +344,13 @@ docker-compose.proxy-network.yml  # add-on: attach `frontend` to your own nginx 
 | 9 | 6 | 3 | 3,4,4,5,5 | 1,1,1,**2**,1 |
 | 10 | 6 | 4 | 3,4,4,5,5 | 1,1,1,**2**,1 |
 
-Role dependencies enforced when starting a game: Percival and the Assassin
-each require Merlin; Morgana requires Percival; Mordred requires Merlin;
-Lancelot (solo) and the Good & Evil Lancelot pair each require Merlin;
-Guinevere requires the Lancelot pair; **Lancelot (solo) and the Lancelot
-pair are mutually exclusive** — pick one or the other, never both.
+Role dependencies enforced when starting a game: Percival requires Merlin;
+the Assassin requires at least one valid target in play (Merlin, Gawain, or
+the Tristan & Iseult pair — see the Gawain design note below); Morgana
+requires Percival; Mordred requires Merlin; Lancelot (solo) and the Good &
+Evil Lancelot pair each require Merlin; Guinevere requires the Lancelot
+pair; **Lancelot (solo) and the Lancelot pair are mutually exclusive** —
+pick one or the other, never both.
 
 **Win conditions**, both enforced inside `_resolve_mission` /
 `sp_cast_team_vote` in Postgres:
@@ -352,8 +360,9 @@ pair are mutually exclusive** — pick one or the other, never both.
   (the standard Avalon rule — vote rejections don't fail a quest by
   themselves, only the vote *track* running out).
 - **Good needs 3 successful missions** *and*, if the Assassin is in play,
-  the Assassin failing to name Merlin afterwards (if the Assassin isn't in
-  play, 3 successes wins outright).
+  the Assassin failing to name a winning target afterwards (Merlin, Gawain,
+  or the Tristan & Iseult pair — see below; if the Assassin isn't in play,
+  3 successes wins outright).
 
 ### Design note: Tristan & Iseult
 
@@ -362,6 +371,38 @@ straightforward one: Tristan and Iseult are both Loyal Servants of Arthur who
 are told each other's identity at the start of the game (see
 `compute_knowledge` in `backend/src/game/roles.py`). If you'd prefer a variant
 where one of them can secretly be Evil, that function is the place to change it.
+
+### Design note: Gawain & the Assassin's targets
+
+Originally the Assassin had exactly one way to win: name Merlin correctly.
+`005_excalibur_view_and_assassin_rework.sql` adds two more routes, alongside
+that one, without changing what "one shot" means — a single
+`sp_submit_assassination` call, naming either 1 or 2 seats:
+
+- **Gawain** (`GAWAIN` in `roles.py`) is a new plain Good role with no
+  special knowledge of his own — his only mechanical purpose is being a
+  second name the Assassin can win by guessing, alongside Merlin. Both can
+  be in play at once (nothing stops it); naming *either* seat wins for
+  Evil. This also means the Assassin no longer strictly requires Merlin —
+  a table could run Gawain (or the pair, below) as Merlin's sole
+  replacement for a harder, magic-free variant, or stack multiple routes
+  for a different kind of tension. `validate_settings` now requires *at
+  least one* of Merlin/Gawain/the Tristan & Iseult pair to be in play
+  whenever the Assassin is, rather than hard-requiring Merlin specifically.
+- **The Tristan & Iseult pair**: naming *both* correctly (in the same
+  assassination call) also wins for Evil — proof the Assassin cracked the
+  secret couple, not just got lucky on one of two Loyal Servants. Naming
+  only one of them (with or without a second, wrong, decoy) does **not**
+  win; `sp_submit_assassination` checks the submitted seat set is exactly
+  `{tristan_seat, iseult_seat}`, no more, no less.
+
+The frontend's `AssassinPanel` reflects this: it's a 1-target picker unless
+Tristan & Iseult are both in play, in which case up to 2 seats can be
+selected (selecting a 3rd bumps the oldest pick, so there's no dead end),
+and the submit button's label changes between "name your guess" and "name
+Tristan & Iseult" based on the count. `EndScreen` names whoever was
+guessed and says whether it was correct, without hard-coding which route
+was actually used — one message covers all three.
 
 ### Design note: Lady of the Lake
 
@@ -386,13 +427,19 @@ real expansion rule:
   sees who'd hold it *before* voting on the team, exactly like the rule
   requires. If the team is rejected, the next leader assigns it fresh —
   nothing carries over between proposals.
-- **Using**: once every participant's mission card is in, the holder sees
-  everyone's real card (`you.excaliburParticipants` — the one place actual
-  card values leave the mission-cards table pre-resolution) and may flip
-  exactly one participant's card (Success↔Fail), or decline and change
-  nothing. Choosing to use it always changes the target's card — there's no
-  "look but don't touch" option, matching the source rule's "has the
-  opportunity to change the submitted vote."
+- **Using — view first, then decide**: originally the holder saw *every*
+  participant's real card at once. That's not the real rule and leaked far
+  more than intended, so `005_excalibur_view_and_assassin_rework.sql`
+  splits it into two calls: `sp_excalibur_view` lets the holder pick **one**
+  participant, revealing only that one's real card (`you.excaliburViewing`
+  — the one place a card value leaves the mission_cards table
+  pre-resolution, and only that single row); calling it again in the same
+  quest is rejected outright, so there's no way to "browse" the whole team
+  card by card. Only after viewing can `sp_excalibur_decision` fire, and
+  only for that same viewed seat — swap it (Success↔Fail) or leave it
+  alone. Choosing to swap always changes the card — there's no "look but
+  don't touch *and* still count as used" option, matching the source
+  rule's "has the opportunity to change the submitted vote."
 - **Lancelot's Reverse card**: Reverse has no natural opposite to flip to,
   so if the holder targets a Reverse card they explicitly pick Success or
   Fail instead of the sword picking one automatically — and that also
@@ -409,13 +456,22 @@ real expansion rule:
   and sets `games.excalibur_used = true` for the rest of the game, same as
   before — just now assigned per-quest instead of fixed at game start.
 - **Transparency**: once a quest resolves, everyone learns who held
-  Excalibur, whether they used it, and — if so — who they targeted
-  (`missionResults[].excaliburHolderSeat`/`excaliburUsed`/
-  `excaliburTargetSeat`, all public). Nobody except the holder and the
-  target ever learns the target's *original* card value
-  (`you.excaliburReveals`, scoped to those two seats' own view only) —
-  matching "only the Excalibur holder and the targeted individual know what
-  the original vote was."
+  Excalibur, who they *viewed*, and whether they used it on them
+  (`missionResults[].excaliburHolderSeat`/`excaliburTargetSeat`/
+  `excaliburUsed`, all public, all unconditional). Per an explicit
+  follow-up instruction, the viewed seat is shown even when Excalibur
+  wasn't used — e.g. "Bob viewed Ryan's card, but did not use Excalibur" —
+  which is broader than the base rule's "everyone knows who it was used
+  *on*" (that only covers the used case), but it's what was asked for.
+  Nobody except the holder and the target ever learns the target's
+  *original* card value either way (`you.excaliburReveals`, scoped to
+  those two seats' own view only, and populated whether or not the view
+  turned into a swap) — matching "only the Excalibur holder and the
+  targeted individual know what the original vote was." While the decision
+  is still pending, `excalibur_viewing_seat` is deliberately never exposed
+  to anyone but the holder themselves (not even in the public `game`
+  object) — bystanders only learn who was viewed once the quest actually
+  resolves, same moment they'd learn it at a real table.
 - **A leak avoided on purpose**: the public per-quest `cardCounts`
   (success/fail/reverse breakdown) always reflects the *current*, post-swap
   `mission_cards` state, never the original. If it showed the pre-swap tally
@@ -526,6 +582,28 @@ just-resolved popup behavior); clicking any earlier resolved pip opens that
 one instead. Dismissing never discards the underlying data, so every past
 quest (and its Excalibur usage) stays reachable for the rest of the game.
 
+### Design note: Quest flavor names
+
+Purely cosmetic — `QUEST_FLAVOR` in `frontend/src/gameData.js` is a static
+5-entry array (The Round Table, Camelot, The Holy Grail, Camlann, The Isle
+of Avalon) indexed directly by `missionNumber`, read by `Game.jsx`'s "Quest
+N of 5" line, `MissionTrack`'s pip tooltips, and `QuestResultModal`'s
+header. No backend or database involvement at all — the mission number
+these are keyed off of is already public, live state, so there was nothing
+to add anywhere else.
+
+### Design note: Lobby role-toggle visuals
+
+The role/extension cards in the lobby (`Lobby.jsx`) previously signaled
+on/off only with a gold border — easy to miss at a glance across a dozen
+cards. Each card now has an explicit sliding switch (`.role-toggle-switch`)
+that's unambiguous even before reading the border, and the active state is
+tinted by team (blue-ish for Good, red for Evil, gold for the
+team-agnostic extensions) instead of always gold, so the whole grid reads
+as "what's on, and whose side is it" at a glance. Purely a CSS/JSX change
+in `Lobby.jsx`/`styles.css` — no behavior changed, same `toggleSetting`
+click handler as before.
+
 ## Verification
 
 No live Docker registry was reachable in the dev sandbox this was built in
@@ -551,19 +629,35 @@ against a real local Postgres 16 and the real backend process (not mocks):
   and unspent) is rejected; designating the leader themselves, or someone
   not on the proposed team, is rejected; the decision phase now triggers on
   *every* quest once a holder is assigned, not just ones with a Fail
-  already in; the holder's view shows every participant's real card;
-  flipping a Success to Fail (and vice versa) updates `mission_cards` and
-  the mission's effective result correctly; declining leaves the quest's
-  cards untouched; using it is correctly rejected a second time in the same
-  game once already spent; and transparency holds exactly as specified —
-  bystanders see holder/used/target after the fact but never the target's
-  original card, while the holder and target's own `you.excaliburReveals`
-  correctly includes it. Both branches of the Lancelot Reverse interaction
-  were explicitly tested: Excalibur declining to touch the Reverse card
-  (the quest's outcome still flips, regression-safe) and Excalibur
+  already in; declining without ever viewing is rejected (`sp_excalibur_decision`
+  requires a prior `sp_excalibur_view`); viewing reveals *only* the chosen
+  seat's real card, never the rest of the team's; viewing a second seat in
+  the same quest is rejected; flipping a Success to Fail (and vice versa)
+  updates `mission_cards` and the mission's effective result correctly;
+  declining leaves the quest's cards untouched, but the missionResults
+  entry still records who was viewed; using it is correctly rejected a
+  second time in the same game once already spent; and transparency holds
+  exactly as specified — bystanders see holder/viewed-target/used after the
+  fact but never the target's original card, while the holder and target's
+  own `you.excaliburReveals` correctly includes it (whether or not it was
+  actually used). Both branches of the Lancelot Reverse interaction were
+  explicitly tested: Excalibur viewing but declining to touch the Reverse
+  card (the quest's outcome still flips, regression-safe) and Excalibur
   explicitly converting the Reverse card to Success/Fail (the quest
   resolves on that real tally directly, no double-flip) — confirming the
   required "Lancelot's reverse evaluates after Excalibur's swap" ordering.
+- **Gawain & the Assassin's alternate targets**: verified with forced roles
+  (again via `psql`, since a specific role landing on a specific seat isn't
+  reachable through normal random dealing) — naming Gawain instead of
+  Merlin correctly wins for Evil; naming both Tristan and Iseult correctly
+  wins for Evil (`assassinationTargets` comes back as both seats); naming
+  only one of the pair plus an unrelated decoy seat does **not** win. This
+  round also caught and fixed a real bug the hard way: the pair-guess
+  comparison (`p_target_seats <@ ARRAY[tristan_seat, iseult_seat]`) failed
+  every single time with a Postgres "operator does not exist" error because
+  the two sides were different array element types (`INT[]` vs implicit
+  `SMALLINT[]`) — invisible without actually exercising that code path
+  end-to-end, which is exactly what this test did before it ever shipped.
 - **Role preference poll and host transfer**: both verified over real
   sockets (vote tallies update live and don't affect actual settings; host
   status correctly moves between players).
@@ -624,6 +718,29 @@ against a real local Postgres 16 and the real backend process (not mocks):
   pip to reopen that same detail later in the game, confirming the popup's
   dismissal on one player's screen doesn't affect another's independent
   copy of the same modal.
+- **Excalibur view-then-decide, Gawain/pair assassination, nicer toggles,
+  quest flavor — all visually**: another real Playwright session against
+  the live dev server and backend (role-forced via `psql` the same way as
+  the backend tests, for the same reason), screenshotting: the redesigned
+  lobby role toggles with visible on/off switches and team-tinted active
+  cards including the new Gawain card; the "Quest 1 of 5 · The Round Table"
+  flavor line; the Excalibur holder's target-picker (no card values shown
+  yet); the single revealed card after viewing (confirmed via screenshot
+  that only the one chosen participant's card is visible — nothing else on
+  the page leaks any other card); the resulting quest-result modal reading
+  "Bob viewed Host's card, but did not use Excalibur." verbatim; the
+  Assassin panel's "Choose who you believe is Merlin. Or select both
+  Tristan and Iseult..." copy with the pair actually selectable up to 2
+  seats; and the end screen reading "The Assassin named Bob & Cara as
+  Tristan & Iseult — correct!" with both seats marked "Assassinated" in the
+  reveal. Two real test-script bugs surfaced and got fixed along the way
+  (not app bugs, but worth recording): a `has-text()` substring selector
+  matching the wrong role card because another role's *description* now
+  happens to name-drop it (Assassin's blurb mentions "Gawain" and "Tristan"
+  by name), and a raw `psql` `UPDATE games SET phase = ...` not triggering
+  `pg_notify` the way the real stored procedures do, so a manually-forced
+  phase change needs an explicit follow-up `SELECT pg_notify(...)` to
+  actually reach a connected browser.
 - **Multi-arch publishing + the external-Postgres compose file**: the
   workflow YAML parses and `docker compose -f docker-compose.external-db.yml
   config` resolves correctly with `DB_HOST`/`POSTGRES_*` set (producing the

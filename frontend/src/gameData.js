@@ -20,6 +20,13 @@ export const ROLE_TOGGLES = [
     description: 'Sees all Evil (except Mordred). The Assassin can win by unmasking him at the end.',
   },
   {
+    key: 'gawain',
+    name: 'Gawain',
+    team: 'good',
+    description:
+      'A plain knight with no special knowledge — but a second name the Assassin can win by guessing instead of Merlin.',
+  },
+  {
     key: 'percival',
     name: 'Percival',
     team: 'good',
@@ -47,7 +54,8 @@ export const ROLE_TOGGLES = [
     key: 'assassin',
     name: 'Assassin',
     team: 'evil',
-    description: 'Gets one shot at naming Merlin if Good wins 3 missions. Requires Merlin.',
+    description:
+      'Gets one shot at naming Merlin (or Gawain, or the Tristan & Iseult pair) if Good wins 3 missions. Requires at least one of those to be in play.',
   },
   {
     key: 'tristanIseult',
@@ -106,6 +114,17 @@ export const EXTENSION_TOGGLES = [
   },
 ];
 
+// Purely cosmetic flavor for each of the 5 quests, in the order requested --
+// a loose Arthurian arc from gathering the company through to the isle
+// where the legend ends. Indexed 0-4 to match game.missionNumber directly.
+export const QUEST_FLAVOR = [
+  { name: 'The Round Table', blurb: 'The knights gather to choose who rides out first.' },
+  { name: 'Camelot', blurb: "Word of the quest's early turns spreads through the court." },
+  { name: 'The Holy Grail', blurb: 'The company presses on toward its most sacred goal.' },
+  { name: 'Camlann', blurb: 'Old loyalties fracture on the field where legends end.' },
+  { name: 'The Isle of Avalon', blurb: 'The final crossing — where the truth is finally laid bare.' },
+];
+
 export function validateSettingsClient(playerCount, settings) {
   const errors = [];
   const cfg = MISSION_CONFIG[playerCount];
@@ -113,7 +132,8 @@ export function validateSettingsClient(playerCount, settings) {
     errors.push(`Need 5–10 players to start (have ${playerCount}).`);
     return errors;
   }
-  if (settings.assassin && !settings.merlin) errors.push('The Assassin requires Merlin to be in play.');
+  if (settings.assassin && !(settings.merlin || settings.gawain || settings.tristanIseult))
+    errors.push('The Assassin needs at least one valid target in play: Merlin, Gawain, or the Tristan & Iseult pair.');
   if (settings.percival && !settings.merlin) errors.push('Percival requires Merlin to be in play.');
   if (settings.morgana && !settings.percival) errors.push('Morgana requires Percival to be in play.');
   if (settings.mordred && !settings.merlin) errors.push('Mordred requires Merlin to be in play.');
@@ -128,6 +148,7 @@ export function validateSettingsClient(playerCount, settings) {
     (settings.merlin ? 1 : 0) +
     (settings.percival ? 1 : 0) +
     (settings.arthur ? 1 : 0) +
+    (settings.gawain ? 1 : 0) +
     (settings.lancelot ? 1 : 0) +
     (settings.lancelotPair ? 1 : 0) +
     (settings.guinevere ? 1 : 0);
