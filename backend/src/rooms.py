@@ -174,11 +174,10 @@ class Room:
         leader_seat = random.choice(seats)
 
         # Lady of the Lake can start with anyone (that's the real rule --
-        # even Evil can hold and use it). Excalibur is Arthur's sword, so it
-        # only ever starts with a Good player.
+        # even Evil can hold and use it). Excalibur has no starting holder
+        # at all -- each quest's leader assigns it fresh, to someone else on
+        # that quest's team, as part of proposing it (sp_propose_team).
         lady_holder_seat = random.choice(seats) if self.settings.get("ladyOfLake") else None
-        good_seats = [a.seat for a in assignments if a.team == "good"]
-        excalibur_holder_seat = random.choice(good_seats) if self.settings.get("excalibur") else None
 
         # Paired Lancelots: the mission at which they swap allegiance is
         # chosen once here, secretly, and never revealed to anyone -- see
@@ -202,7 +201,7 @@ class Room:
             seat_order=seats,
             leader_seat=leader_seat,
             lady_holder_seat=lady_holder_seat,
-            excalibur_holder_seat=excalibur_holder_seat,
+            excalibur_holder_seat=None,  # no starting holder anymore -- see the comment above
             swap_mission_number=swap_mission_number,
             players=players,
         )

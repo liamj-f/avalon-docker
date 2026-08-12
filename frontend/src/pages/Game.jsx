@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useGame } from '../store.jsx';
 import MissionTrack from '../components/MissionTrack.jsx';
 import TeamBuilder from '../components/TeamBuilder.jsx';
@@ -12,7 +12,7 @@ import RoleCard from '../components/RoleCard.jsx';
 import ArthurReveal from '../components/ArthurReveal.jsx';
 import Chat from '../components/Chat.jsx';
 import VoteHistory from '../components/VoteHistory.jsx';
-import QuestResultPopup from '../components/QuestResultPopup.jsx';
+import QuestResultModal from '../components/QuestResultModal.jsx';
 
 const PHASE_LABEL = {
   team_building: 'Team Building',
@@ -47,10 +47,32 @@ export default function Game() {
   const ladyHolder = game.hasLadyOfLake && findPlayer(room.players, game.ladyHolderSeat);
   const excaliburHolder = game.hasExcalibur && findPlayer(room.players, game.excaliburHolderSeat);
 
+  // Which resolved quest's result modal (if any) is open. Doubles as the
+  // "just resolved" auto-popup (results.length growing opens the newest
+  // one) and the click-to-reopen history view from MissionTrack's pips --
+  // one piece of state, one modal, instead of duplicating the UI.
+  const results = game.missionResults;
+  const seenResultCountRef = useRef(results.length);
+  const [openQuestNumber, setOpenQuestNumber] = useState(null);
+
+  useEffect(() => {
+    if (results.length > seenResultCountRef.current) {
+      setOpenQuestNumber(results[results.length - 1].missionNumber);
+    }
+    seenResultCountRef.current = results.length;
+    // Only the count matters for "did a new one just land" -- re-running
+    // this for every unrelated game update would be wasted work.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results.length]);
+
+  const openResult = results.find((m) => m.missionNumber === openQuestNumber);
+
   return (
     <div className="game-layout">
       {game.you && <RoleCard you={game.you} players={room.players} />}
-      <QuestResultPopup game={game} />
+      {openResult && (
+        <QuestResultModal result={openResult} players={room.players} onClose={() => setOpenQuestNumber(null)} />
+      )}
 
       <div className="game-main">
         <div className="card">
@@ -58,7 +80,7 @@ export default function Game() {
             <span className="phase-badge">{PHASE_LABEL[game.phase]}</span>
             <span className="hint">Quest {Math.min(game.missionNumber + 1, 5)} of 5</span>
           </div>
-          <MissionTrack game={game} />
+          <MissionTrack game={game} onSelectQuest={setOpenQuestNumber} />
           {(ladyHolder || excaliburHolder) && (
             <div className="extension-strip">
               {ladyHolder && (

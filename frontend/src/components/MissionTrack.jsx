@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function MissionTrack({ game }) {
+export default function MissionTrack({ game, onSelectQuest }) {
   const { teamSizes, failsRequired, missionResults, missionNumber, rejectionCount } = game;
 
   return (
@@ -12,8 +12,24 @@ export default function MissionTrack({ game }) {
           let cls = 'mission-pip';
           if (result) cls += result.result === 'success' ? ' pip-success' : ' pip-fail';
           else if (isCurrent) cls += ' pip-current';
+
+          const title = `Quest ${i + 1}: ${size} players, ${failsRequired[i]} fail(s) needed${
+            result ? ' — click to see the result' : ''
+          }`;
+
+          // Resolved quests are re-openable so the breakdown (and Excalibur
+          // usage) stays reachable after the auto-popup is dismissed --
+          // that persistent view is the whole point, see QuestResultModal.
+          if (result) {
+            return (
+              <button type="button" key={i} className={cls} title={title} onClick={() => onSelectQuest(i)}>
+                <span className="pip-size">{size}</span>
+                {failsRequired[i] > 1 && <span className="pip-badge">2 fails</span>}
+              </button>
+            );
+          }
           return (
-            <div key={i} className={cls} title={`Quest ${i + 1}: ${size} players, ${failsRequired[i]} fail(s) needed`}>
+            <div key={i} className={cls} title={title}>
               <span className="pip-size">{size}</span>
               {failsRequired[i] > 1 && <span className="pip-badge">2 fails</span>}
             </div>

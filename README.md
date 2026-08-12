@@ -19,9 +19,11 @@ of truth for every game in progress — not just a history log.
   Minion of Mordred roles. Supports 5–10 players with the standard Avalon
   mission/fail tables.
 - **Extensions**: **Lady of the Lake** (checks a player's loyalty after
-  missions 2/3/4, then passes to whoever was examined) and **Excalibur** (a
-  Good player can cleanse one Fail off a mission, once per game), both
-  toggleable from the lobby alongside the core roles.
+  missions 2/3/4, then passes to whoever was examined) and **Excalibur**
+  (each quest's leader hands it to someone else on that team before the
+  vote; once the quest's cards are in, the holder sees every real card and
+  may flip exactly one player's, once per game), both toggleable from the
+  lobby alongside the core roles.
 - **Real-time gameplay** over WebSockets (Socket.IO): team building, public
   team votes, secret mission cards, the assassination phase, and a full
   role-reveal at game end.
@@ -38,11 +40,14 @@ of truth for every game in progress — not just a history log.
   once the instant a vote resolves (never dribbled out before everyone's
   in). The one attempt currently being voted on is never included until it
   resolves.
-- **Quest results, in full**: a dismissable popup announces each quest's
-  outcome the moment it resolves, with the raw Success/Fail/Reverse card
-  breakdown submitted — separate from the (possibly Excalibur-cleansed)
-  effective result. Never forces a reload mid-decision; the popup is purely
-  informational.
+- **Quest results, in full, and reviewable all game long**: a dismissable
+  popup announces each quest's outcome the moment it resolves, with the raw
+  Success/Fail/Reverse card breakdown submitted — separate from the
+  (possibly Excalibur-changed) effective result — plus who held Excalibur
+  that quest, whether it was used, and on whom. Every resolved quest's pip
+  on the mission track stays clickable for the rest of the game to reopen
+  that same detail, so dismissing the popup doesn't lose it. Never forces a
+  reload mid-decision; it's purely informational.
 - **Hide role selections**: the host can toggle the character roster
   invisible to everyone else in the lobby until the game starts (their own
   view, and the vote tally, are unaffected) — for groups that don't want to
@@ -369,13 +374,60 @@ learn is private to them.
 
 ### Design note: Excalibur
 
-This is a fan mechanic with several incompatible variants in the wild, so
-this build picks one and documents it rather than trying to reconcile all of
-them: a Good player starts holding Excalibur. Any time a mission comes back
-with at least one Fail and Excalibur hasn't been used yet, its holder is
-asked whether to cleanse one Fail into a Success. Using it spends Excalibur
-for the rest of the game. The holder is public information, like Lady of the
-Lake; the exact pending fail count is private to the holder until they decide.
+Originally implemented as an invented simplification (a single Good player
+holding it for the whole game, only able to cleanse one Fail on a mission
+that already had one). `004_excalibur_rework.sql` replaces that with the
+real expansion rule:
+
+- **Assigning**: every quest, whoever's proposing the team also designates
+  one *other* player on that team (never themselves) to hold Excalibur for
+  it — as long as it hasn't been spent yet. This is part of the team
+  proposal itself (`sp_propose_team`'s new `p_excalibur_seat`), so everyone
+  sees who'd hold it *before* voting on the team, exactly like the rule
+  requires. If the team is rejected, the next leader assigns it fresh —
+  nothing carries over between proposals.
+- **Using**: once every participant's mission card is in, the holder sees
+  everyone's real card (`you.excaliburParticipants` — the one place actual
+  card values leave the mission-cards table pre-resolution) and may flip
+  exactly one participant's card (Success↔Fail), or decline and change
+  nothing. Choosing to use it always changes the target's card — there's no
+  "look but don't touch" option, matching the source rule's "has the
+  opportunity to change the submitted vote."
+- **Lancelot's Reverse card**: Reverse has no natural opposite to flip to,
+  so if the holder targets a Reverse card they explicitly pick Success or
+  Fail instead of the sword picking one automatically — and that also
+  strips the card's reverse behavior (a still-reversed card is what flips
+  the quest's final result). Per the explicit instruction this was rebuilt
+  against, **Lancelot's reverse-flip is evaluated after Excalibur's swap**,
+  not before: `sp_excalibur_decision` updates `mission_cards` first, *then*
+  recomputes the fail count and calls `_resolve_mission` — so if Excalibur
+  left the Reverse card in place, the quest's raw fail tally still gets
+  flipped by it as the very last step; if Excalibur converted it to a plain
+  Success/Fail, there's no card left to flip and the mission resolves on
+  the (now-final) real tally.
+- **Single-use, forever**: spending it clears `games.excalibur_holder_seat`
+  and sets `games.excalibur_used = true` for the rest of the game, same as
+  before — just now assigned per-quest instead of fixed at game start.
+- **Transparency**: once a quest resolves, everyone learns who held
+  Excalibur, whether they used it, and — if so — who they targeted
+  (`missionResults[].excaliburHolderSeat`/`excaliburUsed`/
+  `excaliburTargetSeat`, all public). Nobody except the holder and the
+  target ever learns the target's *original* card value
+  (`you.excaliburReveals`, scoped to those two seats' own view only) —
+  matching "only the Excalibur holder and the targeted individual know what
+  the original vote was."
+- **A leak avoided on purpose**: the public per-quest `cardCounts`
+  (success/fail/reverse breakdown) always reflects the *current*, post-swap
+  `mission_cards` state, never the original. If it showed the pre-swap tally
+  alongside the public "who got targeted" fact, the target's secret original
+  card would become arithmetically derivable by anyone at the table —
+  so there is deliberately no "before" tally exposed anywhere but to the
+  holder/target pair themselves.
+- Excalibur assignment is validated server-side (`sp_propose_team`): the
+  designated holder must be on the proposed team, must not be the leader,
+  and is required whenever Excalibur is enabled and unspent — the frontend
+  mirrors this in `TeamBuilder`'s `canPropose` gating, but the database is
+  what actually enforces it.
 
 ### Design note: Agravain
 
@@ -404,10 +456,12 @@ this build picks one clean interpretation per mode and documents it:
   `backend/src/game/roles.py`), and who holds a single-use **Reverse**
   card. While on a quest, Lancelot can play Reverse instead of Success;
   it doesn't count as a Fail card itself, but flips that quest's final
-  result (success/fail) after the normal tally. It can interact in
-  chaotic-but-intentional ways with Excalibur if both are enabled (e.g. a
-  cleansed mission can still flip via Reverse) — that's an emergent
-  consequence of two composable mechanics, not a bug.
+  result (success/fail) after the normal tally. If both Lancelot and
+  Excalibur are enabled, Excalibur resolves *first* — the holder can swap
+  the Reverse card itself (converting it to a definite Success/Fail, no
+  longer subject to flipping) or leave it alone, and only then does any
+  remaining Reverse card flip the quest's outcome — see the Excalibur
+  design note above for exactly why that ordering was chosen.
 - **Good & Evil Lancelot pair** (`lancelotPair`): two separate Lancelot
   seats, one dealt Good and one dealt Evil. At a mission number chosen
   secretly at random when the game starts (`games.swap_mission_number`),
@@ -446,15 +500,31 @@ still shows a live in-progress count (`votesInSoFar`/`hasVoted`) without
 leaking anyone's actual choice early; `voteHistory` only ever contains
 fully-resolved attempts.
 
+`team_proposals.excalibur_seat` (added in `004_excalibur_rework.sql`) rides
+along in the same row as the team/leader/attempt, so each `voteHistory`
+entry also carries `excaliburSeat` — the proposed Excalibur holder is
+public before the vote happens, so there's nothing to hide here even for
+the in-progress attempt (`VotePanel` shows it as a live hint; `VoteHistory`
+shows it per past entry).
+
 ### Design note: Quest result cards vs. the effective result
 
 `game_missions.fail_count` is the *effective* fail count — after any
-Excalibur cleanse — used to decide `result`. The new per-quest
-`cardCounts` (`success`/`fail`/`reverse`) are computed separately, straight
-from the raw `mission_cards` rows, and reflect exactly what was submitted
-at the table regardless of any later cleanse. Both are aggregate-only
-queries (`GROUP BY mission_number`): who played which card stays secret
-even though the tally is public the moment a quest resolves.
+Excalibur swap — used to decide `result`. The per-quest `cardCounts`
+(`success`/`fail`/`reverse`) are computed separately, straight from the
+*current* `mission_cards` rows (post-swap, see the Excalibur design note's
+leak-avoidance note above for why not pre-swap), and reflect what's true at
+resolution time. Both are aggregate-only queries (`GROUP BY
+mission_number`): who played which card stays secret even though the tally
+is public the moment a quest resolves.
+
+Both the auto-popup and every resolved quest's pip on the mission track
+render through the same stateless `QuestResultModal`, driven by one piece
+of state in `Game.jsx` (`openQuestNumber`) — a `missionResults.length`
+growing opens the newest quest automatically (matching the previous
+just-resolved popup behavior); clicking any earlier resolved pip opens that
+one instead. Dismissing never discards the underlying data, so every past
+quest (and its Excalibur usage) stays reachable for the rest of the game.
 
 ## Verification
 
@@ -474,10 +544,26 @@ against a real local Postgres 16 and the real backend process (not mocks):
 - **Lady of the Lake**: verified it only triggers after missions 2/3/4 (not
   1), correctly reveals the examined player's true team, passes the token
   to them, and rejects being passed back to a previous holder.
-- **Excalibur**: verified the decision phase only triggers when a mission
-  actually has a Fail, the holder sees the correct pending fail count,
-  using it reduces the recorded fail count by exactly 1, and it's marked
-  spent afterward.
+- **Excalibur (full rework)**: verified over real Socket.IO clients plus
+  direct `psql` role-forcing (to deterministically reach the rare
+  Lancelot+Excalibur interaction, since normal role dealing is random):
+  proposing a team without designating a holder (while Excalibur is active
+  and unspent) is rejected; designating the leader themselves, or someone
+  not on the proposed team, is rejected; the decision phase now triggers on
+  *every* quest once a holder is assigned, not just ones with a Fail
+  already in; the holder's view shows every participant's real card;
+  flipping a Success to Fail (and vice versa) updates `mission_cards` and
+  the mission's effective result correctly; declining leaves the quest's
+  cards untouched; using it is correctly rejected a second time in the same
+  game once already spent; and transparency holds exactly as specified —
+  bystanders see holder/used/target after the fact but never the target's
+  original card, while the holder and target's own `you.excaliburReveals`
+  correctly includes it. Both branches of the Lancelot Reverse interaction
+  were explicitly tested: Excalibur declining to touch the Reverse card
+  (the quest's outcome still flips, regression-safe) and Excalibur
+  explicitly converting the Reverse card to Success/Fail (the quest
+  resolves on that real tally directly, no double-flip) — confirming the
+  required "Lancelot's reverse evaluates after Excalibur's swap" ordering.
 - **Role preference poll and host transfer**: both verified over real
   sockets (vote tallies update live and don't affect actual settings; host
   status correctly moves between players).
@@ -529,6 +615,15 @@ against a real local Postgres 16 and the real backend process (not mocks):
   after, across repeated runs.
 - Frontend: `npm run build` (Vite) completes cleanly, unmodified by the
   backend rewrite.
+- **Excalibur rework + persistent quest history UI, visually**: driven
+  through a real 5-browser-context Playwright session (Chromium) against
+  the actual dev server and backend, screenshotting each new surface —
+  `TeamBuilder`'s Excalibur-holder picker, `VotePanel`'s proposed-holder
+  hint, the quest-result popup showing "Excalibur held by X — used on Y",
+  `VoteHistory`'s "Excalibur to X" line, and clicking a resolved mission
+  pip to reopen that same detail later in the game, confirming the popup's
+  dismissal on one player's screen doesn't affect another's independent
+  copy of the same modal.
 - **Multi-arch publishing + the external-Postgres compose file**: the
   workflow YAML parses and `docker compose -f docker-compose.external-db.yml
   config` resolves correctly with `DB_HOST`/`POSTGRES_*` set (producing the
