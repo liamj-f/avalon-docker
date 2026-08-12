@@ -48,6 +48,14 @@ class Room:
         self.players: dict[str, Player] = {}  # token -> Player
         self.next_seat_index = 0
         self.settings: dict[str, bool] = default_settings()
+        # Host-only lobby display preference, entirely separate from
+        # `settings` above (which is real game config, validated at start
+        # and dealt from) -- purely controls whether non-host players see
+        # the host's live toggle choices in serialize_for_token, and only
+        # while still in the lobby (see there). Persists across a
+        # reset_to_lobby by design -- it's the host's standing preference,
+        # not a per-game setting.
+        self.hide_role_selections: bool = False
         self.role_preferences: dict[str, set[int]] = {}  # role key -> set of seats who want it
         self.phase = "lobby"  # 'lobby' | 'in_game'
         self.game_id: UUID | None = None
@@ -104,7 +112,11 @@ class Room:
             raise GameError("Cannot change roles once the game has started.")
         if token != self.host_token:
             raise GameError("Only the host can change role settings.")
-        self.settings = {**self.settings, **settings}
+        incoming = dict(settings)
+        if "hideRoleSelections" in incoming:
+            self.hide_role_selections = bool(incoming.pop("hideRoleSelections"))
+        if incoming:
+            self.settings = {**self.settings, **incoming}
 
     def set_role_preference(self, token: str, key: str, want: bool) -> None:
         """Non-binding preference poll: any player can say which roles they'd like to see."""
@@ -233,10 +245,20 @@ class Room:
         if self.phase == "in_game" and self.game_id is not None:
             game_state = await game_db.load_game_state_for_seat(self.game_id, seat)
 
+        # Hiding is a lobby-only display preference (see hide_role_selections
+        # above) -- once a game has actually started, the character roster
+        # is table-common-knowledge in Avalon (only who holds which role is
+        # secret), so this never applies to `game_state` and always shows
+        # the real settings there regardless.
+        is_host_view = bool(player and player.is_host)
+        hide_from_this_viewer = self.hide_role_selections and self.phase == "lobby" and not is_host_view
+        visible_settings = {key: False for key in self.settings} if hide_from_this_viewer else self.settings
+
         return {
             "code": self.code,
             "phase": self.phase,
-            "settings": self.settings,
+            "settings": visible_settings,
+            "rolesHidden": self.hide_role_selections,
             "rolePreferenceTally": role_preference_tally,
             "you": (
                 {"seat": seat, "displayName": player.display_name, "isHost": player.is_host, "token": player.token}

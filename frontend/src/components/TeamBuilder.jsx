@@ -25,7 +25,7 @@ export default function TeamBuilder({ room, onPropose }) {
     <div className="phase-panel">
       <h2 className="phase-title">Build the team</h2>
       <p className="phase-lead">
-        Mission {game.missionNumber + 1} needs <strong>{teamSize}</strong> players.
+        Quest {game.missionNumber + 1} needs <strong>{teamSize}</strong> players.
         {!isLeader && (
           <>
             {' '}

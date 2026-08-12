@@ -24,7 +24,7 @@ export default function Home() {
     <div className="card home-card">
       <h1 className="page-title">Gather your court</h1>
       <p className="page-subtitle">
-        Create a lobby or join one with a room code. 5–10 players, real-time voting and missions,
+        Create a lobby or join one with a room code. 5–10 players, real-time voting and quests,
         Postgres-backed game history.
       </p>
 

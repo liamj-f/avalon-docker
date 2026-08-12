@@ -13,7 +13,7 @@ export default function MissionTrack({ game }) {
           if (result) cls += result.result === 'success' ? ' pip-success' : ' pip-fail';
           else if (isCurrent) cls += ' pip-current';
           return (
-            <div key={i} className={cls} title={`Mission ${i + 1}: ${size} players, ${failsRequired[i]} fail(s) needed`}>
+            <div key={i} className={cls} title={`Quest ${i + 1}: ${size} players, ${failsRequired[i]} fail(s) needed`}>
               <span className="pip-size">{size}</span>
               {failsRequired[i] > 1 && <span className="pip-badge">2 fails</span>}
             </div>

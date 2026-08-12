@@ -5,7 +5,7 @@ import { ROLE_TOGGLES, EXTENSION_TOGGLES, validateSettingsClient } from '../game
 export default function Lobby() {
   const { state, updateSettings, startGame, leaveRoom, setRolePreference, transferHost } = useGame();
   const { room } = state;
-  const { you, players, settings, minPlayers, maxPlayers, rolePreferenceTally } = room;
+  const { you, players, settings, minPlayers, maxPlayers, rolePreferenceTally, rolesHidden } = room;
 
   const errors = validateSettingsClient(players.length, settings);
   const notEnoughPlayers = players.length < minPlayers;
@@ -18,6 +18,11 @@ export default function Lobby() {
   const toggleSetting = (key) => {
     if (!you?.isHost) return;
     updateSettings({ [key]: !settings[key] });
+  };
+
+  const toggleHideSelections = () => {
+    if (!you?.isHost) return;
+    updateSettings({ hideRoleSelections: !room.rolesHidden });
   };
 
   const toggleVote = (key) => {
@@ -91,11 +96,24 @@ export default function Lobby() {
       </div>
 
       <div className="card">
-        <h2 className="section-title">Roles</h2>
+        <div className="section-title-row">
+          <h2 className="section-title">Roles</h2>
+          {you?.isHost && (
+            <label className="hide-toggle">
+              <input type="checkbox" checked={!!rolesHidden} onChange={toggleHideSelections} />
+              Hide selections from other players
+            </label>
+          )}
+        </div>
         <p className="hint">
           {you?.isHost ? 'Toggle which characters are in play.' : 'Only the host can change roles.'} Everyone can cast a
           👍 preference vote — it&rsquo;s advisory, the host has final say.
         </p>
+        {rolesHidden && !you?.isHost && (
+          <p className="hidden-roles-banner">
+            🙈 The host has hidden the character selections — you&rsquo;ll see the full roster once the game starts.
+          </p>
+        )}
         <div className="role-toggle-grid">{renderToggleGroup(ROLE_TOGGLES)}</div>
 
         <h2 className="section-title" style={{ marginTop: 20 }}>

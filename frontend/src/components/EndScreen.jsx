@@ -2,7 +2,7 @@ import React from 'react';
 import { useGame } from '../store.jsx';
 
 const REASON_TEXT = {
-  missions: 'by winning three missions',
+  missions: 'by winning three quests',
   vote_track: 'because five team proposals were rejected in a row',
   assassination: 'the Assassin correctly identified Merlin',
 };
