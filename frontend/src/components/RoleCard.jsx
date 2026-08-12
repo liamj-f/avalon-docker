@@ -1,18 +1,12 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-export default function RoleCard({ you, players }) {
-  // `collapsed` starts false so every player sees the full reveal once, up
-  // front, before tucking it away into the small tab.
-  const [collapsed, setCollapsed] = useState(false);
-
-  if (collapsed) {
-    return (
-      <button type="button" className="role-reveal-tab" onClick={() => setCollapsed(false)}>
-        Your role: <strong>{you.role}</strong> ({you.team}) — tap to view
-      </button>
-    );
-  }
-
+// The full secret-identity reveal. Visibility (and the small "tap to view"
+// tab shown once dismissed) is owned by App.jsx now, not this component --
+// it needs to live in the sticky header rather than float over the page
+// with its own position:fixed tab, which used to land right on top of the
+// Table Talk sidebar on any viewport narrower than the layout's own
+// max-width. See styles.css's .header-role-tab for where it ended up.
+export default function RoleCard({ you, players, onDismiss }) {
   return (
     <div className="modal-backdrop">
       <div className={`modal role-modal role-modal-${you.team}`}>
@@ -39,7 +33,7 @@ export default function RoleCard({ you, players }) {
           <p className="hint">You have no special knowledge this game. Watch the votes closely.</p>
         )}
 
-        <button type="button" className="btn btn-primary" onClick={() => setCollapsed(true)}>
+        <button type="button" className="btn btn-primary" onClick={onDismiss}>
           Got it, hide my role
         </button>
       </div>

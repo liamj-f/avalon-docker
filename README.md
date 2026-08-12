@@ -802,6 +802,24 @@ against a real local Postgres 16 and the real backend process (not mocks):
   and the quest-result popup rendering with its card breakdown after a real
   quest resolved.
 
+- **Role-reveal tab no longer overlapping Table Talk**: the collapsed
+  "Your role: ... — tap to view" tab used to be a `position: fixed`
+  element pinned to the viewport's top-right corner, entirely independent
+  of the actual game-layout grid it was floating over — on any desktop
+  window between the layout's single-column breakpoint (860px) and roughly
+  its own max-width plus padding (~1148px), a very ordinary window size,
+  it landed directly on top of the Table Talk sidebar's header. Moved into
+  a sticky `app-header` instead (owned by `App.jsx`, not `Game.jsx`), so it
+  shares a normal flex row with the connection pill rather than floating
+  independently. Verified with Playwright by measuring the tab's and the
+  chat box's actual bounding rectangles (not just eyeballing a screenshot)
+  at 1000px — the exact width that used to reproduce it — both before and
+  after scrolling the page, confirming zero overlap and that the tab stays
+  reachable (sticky) without needing to scroll back up; also checked at
+  1400px (wide) and 400px (mobile) for regressions, and confirmed the
+  reopened role modal still renders above the sticky header (`z-index`
+  100 vs. 50).
+
 Worth a real `docker compose up -d` (pulling the published GHCR images) or
 `docker compose up --build` (after swapping `image:` for `build:` in
 `docker-compose.yml`) on your machine before you consider it done — the
