@@ -15,15 +15,18 @@ export default function EndScreen({ room }) {
   const targetSeats = game.assassinationTargets || [];
   const targetNames = targetSeats.map((s) => players.find((p) => p.seat === s)?.displayName).join(' & ');
   const guessedThePair = targetSeats.length === 2;
+  const passed = game.winReason === 'assassination' && targetSeats.length === 0;
 
   return (
     <div className="phase-panel end-screen">
       <h2 className={`end-title end-title-${game.winner}`}>{winnerLabel} wins!</h2>
       <p className="phase-lead">
         {game.winReason === 'assassination'
-          ? `The Assassin named ${targetNames}${guessedThePair ? ' as Tristan & Iseult' : ''} — ${
-              game.winner === 'evil' ? 'correct!' : 'incorrect.'
-            }`
+          ? passed
+            ? 'The Assassin passed — Good’s win stands.'
+            : `The Assassin named ${targetNames}${guessedThePair ? ' as Tristan & Iseult' : ''} — ${
+                game.winner === 'evil' ? 'correct!' : 'incorrect.'
+              }`
           : `Victory ${reasonText}.`}
       </p>
 
