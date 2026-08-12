@@ -7,10 +7,12 @@ export default function AssassinPanel({ room, onAssassinate }) {
   const isAssassin = you.roleId === 'ASSASSIN';
   const hasPairRoute = game.hasTristanIseult;
 
-  // A guess is either 1 seat (a Merlin/Gawain guess) or, when Tristan &
-  // Iseult are in play, exactly 2 (a guess at the secret pair) -- see
-  // sp_submit_assassination. Toggling a third seat on replaces the oldest
-  // pick rather than growing past 2, so there's no dead-end state.
+  // Three modes, matching sp_submit_assassination exactly: name 1 seat
+  // (guess Merlin -- Gawain also wins it for Evil, but only in *this*
+  // mode), name exactly 2 (guess the Lovers, correct only if it's really
+  // Tristan & Iseult), or name nobody (Pass -- Good's win stands, nothing
+  // revealed). Toggling a third seat on replaces the oldest pick rather
+  // than growing past 2, so there's no dead-end state.
   const toggleTarget = (seat) => {
     setTargets((prev) => {
       if (prev.includes(seat)) return prev.filter((s) => s !== seat);
@@ -20,8 +22,7 @@ export default function AssassinPanel({ room, onAssassinate }) {
     });
   };
 
-  const buttonLabel =
-    targets.length === 2 ? 'Name Tristan & Iseult' : targets.length === 1 ? 'Name as your guess' : 'Choose a target';
+  const buttonLabel = targets.length === 2 ? 'Name Tristan & Iseult' : 'Name as your guess';
 
   return (
     <div className="phase-panel">
@@ -32,8 +33,8 @@ export default function AssassinPanel({ room, onAssassinate }) {
               hasPairRoute
                 ? ' Or select both Tristan and Iseult if you’ve worked out the secret pair.'
                 : ''
-            }`
-          : 'The Assassin is choosing a target. Hold your breath.'}
+            } Or pass, if you’d rather not guess.`
+          : 'The Assassin is choosing whether — and who — to name. Hold your breath.'}
       </p>
 
       <div className="avatar-grid">
@@ -52,14 +53,19 @@ export default function AssassinPanel({ room, onAssassinate }) {
       </div>
 
       {isAssassin && (
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={targets.length === 0}
-          onClick={() => onAssassinate(targets)}
-        >
-          {buttonLabel}
-        </button>
+        <div className="vote-buttons">
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={targets.length === 0}
+            onClick={() => onAssassinate(targets)}
+          >
+            {buttonLabel}
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={() => onAssassinate([])}>
+            🏳️ Pass — let Good’s win stand
+          </button>
+        </div>
       )}
     </div>
   );
