@@ -967,6 +967,49 @@ button.mission-pip:hover {
   gap: 10px;
 }
 
+.assassin-mode-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.assassin-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 200px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 2px solid var(--card-border);
+  background: var(--bg-alt);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.1s ease, background 0.1s ease;
+}
+
+.assassin-mode:hover {
+  border-color: var(--text-dim);
+}
+
+.assassin-mode span {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.assassin-mode-active {
+  border-color: var(--gold);
+  background: rgba(217, 180, 100, 0.08);
+  box-shadow: 0 0 0 1px var(--gold) inset;
+}
+
+.assassin-mode-active span {
+  color: var(--text);
+}
+
 .vote-history {
   margin-top: 20px;
 }
