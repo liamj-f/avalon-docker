@@ -48,7 +48,7 @@ export default function LadyOfLakePanel({ room, onUse }) {
               const p = players.find((pl) => pl.seat === r.targetSeat);
               return (
                 <li key={r.missionNumber}>
-                  After mission {r.missionNumber + 1}: <strong>{p?.displayName}</strong> is {r.team}.
+                  After quest {r.missionNumber + 1}: <strong>{p?.displayName}</strong> is {r.team}.
                 </li>
               );
             })}

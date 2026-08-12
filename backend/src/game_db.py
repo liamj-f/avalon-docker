@@ -92,6 +92,25 @@ async def load_game_state_for_seat(game_id: UUID, seat: int | None) -> dict[str,
         game_id,
     )
 
+    # The raw cards actually submitted, regardless of any later Excalibur
+    # cleanse -- game_missions.fail_count above is the *effective* count
+    # used to decide the result, which can differ from what was really
+    # played. Aggregated by mission_number only (never per-seat): who
+    # played what stays secret, but the tally itself is exactly what gets
+    # announced at the table once a quest resolves.
+    card_count_rows = await pool.fetch(
+        """SELECT mission_number,
+                  COUNT(*) FILTER (WHERE success AND NOT reversed)::int AS success_count,
+                  COUNT(*) FILTER (WHERE NOT success AND NOT reversed)::int AS fail_count,
+                  COUNT(*) FILTER (WHERE reversed)::int AS reverse_count
+             FROM mission_cards WHERE game_id = $1 GROUP BY mission_number""",
+        game_id,
+    )
+    card_counts = {
+        r["mission_number"]: {"success": r["success_count"], "fail": r["fail_count"], "reverse": r["reverse_count"]}
+        for r in card_count_rows
+    }
+
     settings = g["settings"]
 
     base: dict[str, Any] = {
@@ -110,6 +129,7 @@ async def load_game_state_for_seat(game_id: UUID, seat: int | None) -> dict[str,
                 "team": m["team_seats"],
                 "result": m["result"],
                 "failCount": m["fail_count"],
+                "cardCounts": card_counts.get(m["mission_number"], {"success": 0, "fail": 0, "reverse": 0}),
             }
             for m in mission_rows
         ],
@@ -142,6 +162,49 @@ async def load_game_state_for_seat(game_id: UUID, seat: int | None) -> dict[str,
         {"seat": r["seat"], "roleId": r["role"], "role": ROLES[r["role"]]["name"], "team": r["team"]}
         for r in public_reveals
     ]
+
+    # Every past team vote, in full -- who proposed it, who was on it, and
+    # (once it's actually resolved) how each seat voted. Real Avalon reveals
+    # a vote's individual choices the instant everyone's in, all at once, so
+    # the one attempt currently being voted on (if any) is deliberately
+    # left out here rather than dribbled out card-by-card as votes arrive --
+    # VotePanel's votesInSoFar/hasVoted already covers that in-progress
+    # count without leaking anyone's actual choice early.
+    live_attempt = (g["mission_number"], g["rejection_count"]) if g["phase"] == "team_voting" else None
+    proposal_rows = await pool.fetch(
+        """SELECT mission_number, attempt, leader_seat, team_seats
+             FROM team_proposals WHERE game_id = $1 ORDER BY mission_number, attempt""",
+        game_id,
+    )
+    vote_rows = await pool.fetch(
+        """SELECT mission_number, attempt, seat, approve
+             FROM team_votes WHERE game_id = $1 ORDER BY mission_number, attempt, seat""",
+        game_id,
+    )
+    votes_by_attempt: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    for v in vote_rows:
+        votes_by_attempt.setdefault((v["mission_number"], v["attempt"]), []).append(
+            {"seat": v["seat"], "approve": v["approve"]}
+        )
+
+    vote_history = []
+    for p in proposal_rows:
+        key = (p["mission_number"], p["attempt"])
+        if key == live_attempt:
+            continue
+        votes = votes_by_attempt.get(key, [])
+        approvals = sum(1 for v in votes if v["approve"])
+        vote_history.append(
+            {
+                "missionNumber": p["mission_number"],
+                "attempt": p["attempt"],
+                "leaderSeat": p["leader_seat"],
+                "team": p["team_seats"],
+                "votes": votes,
+                "approved": (approvals * 2 > len(votes)) if votes else None,
+            }
+        )
+    base["voteHistory"] = vote_history
 
     if g["phase"] == "team_voting":
         row = await pool.fetchrow(

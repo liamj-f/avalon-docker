@@ -474,6 +474,33 @@ button {
   color: var(--evil);
 }
 
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hide-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.hidden-roles-banner {
+  background: var(--bg-alt);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin: 0 0 12px;
+}
+
 .error-list {
   color: #ffd7d7;
   font-size: 0.82rem;
@@ -749,11 +776,80 @@ button {
   gap: 10px;
 }
 
+.vote-history {
+  margin-top: 20px;
+}
+
+.vote-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
 .vote-history-card {
   background: var(--bg-alt);
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 0.82rem;
+  border-left: 3px solid var(--card-border);
+}
+
+.vote-history-approved {
+  border-left-color: var(--success);
+}
+
+.vote-history-rejected {
+  border-left-color: var(--evil);
+}
+
+.vote-history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.outcome-approved {
+  color: var(--success);
+}
+
+.outcome-rejected {
+  color: var(--evil);
+}
+
+.vote-history-team {
+  color: var(--text-dim);
+  margin: 0 0 8px;
+}
+
+.vote-history-votes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.vote-chip {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: var(--bg);
+}
+
+.vote-chip-approve {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.vote-chip-reject {
+  color: var(--evil);
+  border-color: var(--evil);
 }
 
 .end-screen {
@@ -845,6 +941,27 @@ button {
 .role-desc {
   color: var(--text-dim);
   margin: 12px 0;
+}
+
+.quest-result-title {
+  font-size: 1.8rem;
+}
+
+.quest-result-title-success {
+  color: var(--success);
+}
+
+.quest-result-title-fail {
+  color: var(--evil);
+}
+
+.quest-result-breakdown {
+  color: var(--text-dim);
+  margin: 12px 0 20px;
+}
+
+.quest-result-modal .btn {
+  width: 100%;
 }
 
 .knowledge-box {

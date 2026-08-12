@@ -17,7 +17,7 @@ RETURNS SMALLINT AS $$
 $$ LANGUAGE sql IMMUTABLE;
 
 -- Deals a game into existence. Role assignment/shuffling happens in the
--- Node app (backend/src/game/roles.js) — it's already unit-tested there —
+-- Python app (backend/src/game/roles.py) — it's already unit-tested there —
 -- this just persists the result and sets up initial turn state.
 CREATE OR REPLACE FUNCTION sp_start_game(
     p_room_code VARCHAR,

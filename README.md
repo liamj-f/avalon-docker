@@ -33,6 +33,20 @@ of truth for every game in progress — not just a history log.
   icon and window, no browser chrome. Purely an app-shell/installability
   layer — see the design note below for why this can't and doesn't touch
   the Socket.IO connection.
+- **Team vote history**: every past team proposal — leader, team, and how
+  each seat voted — stays visible for the rest of the game, revealed all at
+  once the instant a vote resolves (never dribbled out before everyone's
+  in). The one attempt currently being voted on is never included until it
+  resolves.
+- **Quest results, in full**: a dismissable popup announces each quest's
+  outcome the moment it resolves, with the raw Success/Fail/Reverse card
+  breakdown submitted — separate from the (possibly Excalibur-cleansed)
+  effective result. Never forces a reload mid-decision; the popup is purely
+  informational.
+- **Hide role selections**: the host can toggle the character roster
+  invisible to everyone else in the lobby until the game starts (their own
+  view, and the vote tally, are unaffected) — for groups that don't want to
+  telegraph the roster while people are still joining.
 
 ## Architecture — Postgres is the game
 
@@ -282,11 +296,15 @@ backend/
     001_schema.sql        # every table: games, game_players, game_missions, team_votes,
                            # mission_cards, lady_of_lake_events, excalibur_events, mission_config
     002_procedures.sql     # the actual game engine, as PL/pgSQL stored procedures
+    003_team_proposals.sql  # one row per team proposal (leader + team), so a resolved
+                             # vote's per-seat choices can be shown back later -- see
+                             # the Team vote history feature and its design note
 frontend/
   src/
     pages/            # Home, Lobby, Game
     components/        # TeamBuilder, VotePanel, MissionPanel, AssassinPanel, LadyOfLakePanel,
-                        # ExcaliburPanel, ArthurReveal, EndScreen, RoleCard, MissionTrack, Chat, PlayerAvatar
+                        # ExcaliburPanel, ArthurReveal, EndScreen, RoleCard, MissionTrack, Chat, PlayerAvatar,
+                        # VoteHistory, QuestResultPopup
     store.jsx           # Socket.IO client + app state (React context)
     PwaUpdatePrompt.jsx  # "new version available" toast -- see PWA design note
   public/
@@ -411,6 +429,33 @@ this build picks one clean interpretation per mode and documents it:
   `validate_settings` (backend) and `validateSettingsClient` (frontend) —
   see Verification below for the test covering this.
 
+### Design note: Team vote history
+
+`team_votes` alone was never enough to show a resolved vote back later — it
+records who voted which way, but not who was leading or who was on the
+team, and `games.proposed_team`/`leader_seat` get overwritten by the very
+next proposal the instant one resolves. `003_team_proposals.sql` adds a
+`team_proposals` table (one row per leader-proposal-attempt) specifically
+so that context survives; `game_db.py`'s `voteHistory` query then joins it
+against `team_votes`.
+
+The one attempt currently being voted on is deliberately excluded from
+`voteHistory` — real Avalon reveals a vote's individual choices the instant
+everyone's in, all at once, never card-by-card as they arrive. `VotePanel`
+still shows a live in-progress count (`votesInSoFar`/`hasVoted`) without
+leaking anyone's actual choice early; `voteHistory` only ever contains
+fully-resolved attempts.
+
+### Design note: Quest result cards vs. the effective result
+
+`game_missions.fail_count` is the *effective* fail count — after any
+Excalibur cleanse — used to decide `result`. The new per-quest
+`cardCounts` (`success`/`fail`/`reverse`) are computed separately, straight
+from the raw `mission_cards` rows, and reflect exactly what was submitted
+at the table regardless of any later cleanse. Both are aggregate-only
+queries (`GROUP BY mission_number`): who played which card stays secret
+even though the tally is public the moment a quest resolves.
+
 ## Verification
 
 No live Docker registry was reachable in the dev sandbox this was built in
@@ -505,6 +550,22 @@ against a real local Postgres 16 and the real backend process (not mocks):
   registry access in this sandbox to build/run the actual container) — a
   quick real-device install/reload-prompt check is worth doing once this
   reaches a live deploy.
+- **Team vote history, quest result cards, hide role selections**: verified
+  against a real local Postgres 16 instance and the real backend process
+  (not mocks), driven by real Socket.IO clients — confirmed the in-progress
+  attempt never appears in `voteHistory`, a rejected attempt records all 5
+  seats' actual choices correctly, `voteHistory` accumulates correctly
+  across multiple attempts, and `cardCounts` is correct for both an
+  all-success quest and one with a Fail card (including the quest actually
+  failing, since a 5-player quest 1 only needs 1 Fail). Also driven through
+  a real Chromium browser (Playwright, 5 real tabs/players) end to end:
+  screenshotted the host's view while toggling roles and hiding selections,
+  the non-host's view showing the hidden-selections banner and blanked
+  toggles, the dynamic footer correctly reflecting a custom roster (and
+  correctly falling back to the generic text when hidden), the Team vote
+  history card rendering a real rejected proposal with per-seat vote chips,
+  and the quest-result popup rendering with its card breakdown after a real
+  quest resolved.
 
 Worth a real `docker compose up -d` (pulling the published GHCR images) or
 `docker compose up --build` (after swapping `image:` for `build:` in

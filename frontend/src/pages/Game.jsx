@@ -11,11 +11,13 @@ import EndScreen from '../components/EndScreen.jsx';
 import RoleCard from '../components/RoleCard.jsx';
 import ArthurReveal from '../components/ArthurReveal.jsx';
 import Chat from '../components/Chat.jsx';
+import VoteHistory from '../components/VoteHistory.jsx';
+import QuestResultPopup from '../components/QuestResultPopup.jsx';
 
 const PHASE_LABEL = {
   team_building: 'Team Building',
   team_voting: 'Team Vote',
-  mission: 'Mission',
+  mission: 'Quest',
   lady_of_lake: 'Lady of the Lake',
   excalibur_decision: 'Excalibur',
   assassination: 'Assassination',
@@ -48,12 +50,13 @@ export default function Game() {
   return (
     <div className="game-layout">
       {game.you && <RoleCard you={game.you} players={room.players} />}
+      <QuestResultPopup game={game} />
 
       <div className="game-main">
         <div className="card">
           <div className="phase-badge-row">
             <span className="phase-badge">{PHASE_LABEL[game.phase]}</span>
-            <span className="hint">Mission {Math.min(game.missionNumber + 1, 5)} of 5</span>
+            <span className="hint">Quest {Math.min(game.missionNumber + 1, 5)} of 5</span>
           </div>
           <MissionTrack game={game} />
           {(ladyHolder || excaliburHolder) && (
@@ -96,6 +99,8 @@ export default function Game() {
           {game.phase === 'assassination' && <AssassinPanel room={viewRoom} onAssassinate={submitAssassination} />}
           {game.phase === 'game_over' && <EndScreen room={viewRoom} />}
         </div>
+
+        <VoteHistory room={viewRoom} />
       </div>
 
       <div className="game-sidebar">

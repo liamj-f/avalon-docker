@@ -12,8 +12,8 @@ export default function ExcaliburPanel({ room, onDecide }) {
       <h2 className="phase-title">⚔️ Excalibur</h2>
       <p className="phase-lead">
         {isHolder
-          ? `This mission came back with ${you.excaliburPendingFailCount} Fail${you.excaliburPendingFailCount === 1 ? '' : 's'}. You may cleanse one Fail into a Success — using it spends Excalibur for the rest of the game, so choose carefully.`
-          : `${holderName} holds Excalibur and is deciding whether to cleanse this mission.`}
+          ? `This quest came back with ${you.excaliburPendingFailCount} Fail${you.excaliburPendingFailCount === 1 ? '' : 's'}. You may cleanse one Fail into a Success — using it spends Excalibur for the rest of the game, so choose carefully.`
+          : `${holderName} holds Excalibur and is deciding whether to cleanse this quest.`}
       </p>
 
       <div className="avatar-grid">

@@ -9,7 +9,7 @@ export default function MissionPanel({ room, onPlayCard }) {
 
   return (
     <div className="phase-panel">
-      <h2 className="phase-title">Mission {game.missionNumber + 1} is underway</h2>
+      <h2 className="phase-title">Quest {game.missionNumber + 1} is underway</h2>
 
       <div className="avatar-grid">
         {players.map((p) => (
@@ -47,7 +47,7 @@ export default function MissionPanel({ room, onPlayCard }) {
         )
       ) : (
         <p className="hint">
-          You&rsquo;re not on this mission ({game.missionVotesInSoFar}/{game.proposedTeam.length} cards played). Sit tight.
+          You&rsquo;re not on this quest ({game.missionVotesInSoFar}/{game.proposedTeam.length} cards played). Sit tight.
         </p>
       )}
     </div>

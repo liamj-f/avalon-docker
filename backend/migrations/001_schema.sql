@@ -5,12 +5,12 @@
 -- holds Lady of the Lake / Excalibur, etc. They're mutated exclusively
 -- through the stored procedures in 002_procedures.sql, each of which ends
 -- with pg_notify('avalon_game_updates', game_id) so the backend's LISTEN
--- connection (backend/src/gameNotify.js) can push fresh state to players in
+-- connection (backend/src/game_notify.py) can push fresh state to players in
 -- real time — including when a procedure is called by hand from psql
 -- instead of by the app. See README for a worked example.
 --
 -- The lobby (who's connected, chat, the role preference poll, who's host)
--- stays in the backend's in-memory RoomManager (backend/src/rooms.js) — it's
+-- stays in the backend's in-memory RoomManager (backend/src/rooms.py) — it's
 -- inherently tied to live socket connections, which don't have a clean
 -- row-per-fact shape, and doesn't need to survive a restart the way an
 -- in-progress vote does.
