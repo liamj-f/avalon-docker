@@ -8,10 +8,15 @@ export default function AssassinPanel({ room, onAssassinate }) {
 
   // Mode is now an explicit, named choice -- not just "however many seats
   // happen to be clicked" -- matching sp_submit_assassination exactly:
-  // name 1 seat in "merlin" mode (correct if it's Merlin, or Gawain if
-  // he's in play), or name exactly 2 in "lovers" mode (correct only if
-  // it's really Tristan & Iseult). Defaults to "merlin" since that's the
-  // only mode at all when the pair isn't in play.
+  // name 1 seat in "merlin" mode, or name exactly 2 in "lovers" mode
+  // (correct only if it's really Tristan & Iseult). Defaults to "merlin"
+  // since that's the only mode at all when the pair isn't in play.
+  //
+  // Gawain is deliberately never mentioned here even when he's in play:
+  // he's a valid winning answer in this mode server-side
+  // (sp_submit_assassination), but the Assassin is always trying to
+  // identify Merlin specifically, never "Merlin or Gawain" as a target --
+  // surfacing him here would just be an unearned hint.
   const [mode, setMode] = useState('merlin');
   const [targets, setTargets] = useState([]);
   const modeTargetCount = mode === 'lovers' ? 2 : 1;
@@ -54,7 +59,7 @@ export default function AssassinPanel({ room, onAssassinate }) {
                 onClick={() => selectMode('merlin')}
               >
                 <strong>Guess Merlin</strong>
-                <span>Name 1 player{game.hasGawain ? ' — Gawain also wins it' : ''}</span>
+                <span>Name 1 player</span>
               </button>
               <button
                 type="button"
@@ -70,7 +75,7 @@ export default function AssassinPanel({ room, onAssassinate }) {
           <p className="hint">
             {mode === 'lovers'
               ? `Select exactly 2 players you believe are Tristan & Iseult (${targets.length}/2 picked).`
-              : `Select 1 player you believe is Merlin${game.hasGawain ? ' — or Gawain' : ''} (${targets.length}/1 picked).`}
+              : `Select 1 player you believe is Merlin (${targets.length}/1 picked).`}
           </p>
         </>
       )}
