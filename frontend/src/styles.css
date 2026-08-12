@@ -909,8 +909,8 @@ button.mission-pip:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 0.8rem;
+  font-size: 1.05rem;
+  line-height: 1;
 }
 
 .avatar-name {

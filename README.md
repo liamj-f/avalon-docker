@@ -394,7 +394,12 @@ named (0, 1, or 2):
   as Merlin's sole replacement for a harder, magic-free variant.
   `validate_settings` requires *at least one* of Merlin/Gawain/the Tristan
   & Iseult pair to be in play whenever the Assassin is, rather than
-  hard-requiring Merlin specifically.
+  hard-requiring Merlin specifically. **The Assassin's own screen never
+  says any of this, on purpose**: from the player's seat, the target is
+  always "whoever you believe is Merlin" — Gawain winning too is a
+  mechanical fact for the *server* to check, not something the UI should
+  hint at, since the Assassin isn't trying to identify Gawain and telling
+  them he's a valid alternate answer would just be an unearned nudge.
 - **Guess the Lovers** (name exactly 2 seats): correct only if they're
   exactly `{tristan_seat, iseult_seat}` — proof the Assassin cracked the
   secret couple, not just got lucky on one of two Loyal Servants. Naming
@@ -623,6 +628,22 @@ as "what's on, and whose side is it" at a glance. Purely a CSS/JSX change
 in `Lobby.jsx`/`styles.css` — no behavior changed, same `toggleSetting`
 click handler as before.
 
+### Design note: Themed avatar icons
+
+`PlayerAvatar.jsx` used to show a player's own initials in the circle.
+Replaced with a fixed, on-theme icon per **seat** (`SEAT_ICONS` — 🛡️ 🏰 🐉
+🦁 🦅 🐺 🦌 🐎 📯 🕊️, one of the 10 possible seats, `seat % 10`) — every
+seat shows the same icon all game, same stable per-player identity cue the
+initials used to give, just no longer plain text. Picked deliberately
+disjoint from every *functional* emoji marker used elsewhere (👑 leader,
+⚔️ Excalibur, ✅❌🔄 quest cards, 🏳️ pass, 👁️ view, ✨ use Excalibur, 🌊 Lady
+of the Lake, 🔀 Lancelot swap) so a seat's icon can never be mistaken for
+one of those badges. The leader crown in particular is untouched — it's
+still its own small badge absolutely positioned above the circle
+(`.avatar-crown`), not merged into or replacing the seat icon underneath
+it, so a leader's seat icon and their "you're the leader" marker both stay
+independently readable. The display name underneath is unchanged.
+
 ## Verification
 
 No live Docker registry was reachable in the dev sandbox this was built in
@@ -773,7 +794,8 @@ against a real local Postgres 16 and the real backend process (not mocks):
 - **Assassin's explicit mode picker, visually**: confirmed the "Guess
   Merlin" / "Guess the Lovers" cards don't render at all when Tristan &
   Iseult aren't in play (single implicit mode, matching the plain
-  "select 1 player" hint text with a Gawain mention); confirmed they do
+  "select 1 player" hint text — with no mention of Gawain anywhere on this
+  screen, by design, even when he's in play); confirmed the cards do
   render, side by side with live descriptions, when the pair is in play;
   clicked into Lovers mode and confirmed selecting Bob and Cara (Tristan
   and Iseult) submits and correctly wins for Evil; and confirmed switching
@@ -781,6 +803,18 @@ against a real local Postgres 16 and the real backend process (not mocks):
   in-progress pick (checked the DOM directly for zero `.avatar-selected`
   elements immediately after the mode switch) rather than silently
   carrying over a now-invalid selection.
+- **Themed avatar icons + all 5 quest-result popups, visually**: played
+  quest 1 for real end to end (including an Excalibur swap), then forced
+  quests 2-5 directly via `psql` (varied outcomes and card mixes, on
+  purpose — a clean 3-success, a Reverse-flipped fail, a real-Fail-card
+  fail, and a clean success again) purely to demo all 5 Arthurian names
+  quickly rather than re-testing logic already covered above. Confirmed
+  each popup's header names the right quest ("Quest 3: The Holy Grail —
+  result") and its card breakdown matches what was actually inserted,
+  including the Reverse count and the Excalibur line. Also confirmed the
+  new seat icons render distinctly per seat, stay stable across a phase
+  change, and that a leader's crown badge sits cleanly separate from their
+  seat icon rather than overlapping or replacing it.
 - **Multi-arch publishing + the external-Postgres compose file**: the
   workflow YAML parses and `docker compose -f docker-compose.external-db.yml
   config` resolves correctly with `DB_HOST`/`POSTGRES_*` set (producing the
