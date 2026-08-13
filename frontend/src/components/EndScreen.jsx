@@ -6,10 +6,12 @@ const REASON_TEXT = {
   vote_track: 'because five team proposals were rejected in a row',
 };
 
+const WINNER_LABEL = { good: 'Good', evil: 'Evil', gawain: 'Gawain' };
+
 export default function EndScreen({ room }) {
   const { game, players, you } = room;
   const { resetToLobby } = useGame();
-  const winnerLabel = game.winner === 'good' ? 'Good' : 'Evil';
+  const winnerLabel = WINNER_LABEL[game.winner] || 'Evil';
   const reasonText = REASON_TEXT[game.winReason] || '';
 
   const targetSeats = game.assassinationTargets || [];
@@ -17,17 +19,27 @@ export default function EndScreen({ room }) {
   const guessedThePair = targetSeats.length === 2;
   const passed = game.winReason === 'assassination' && targetSeats.length === 0;
 
+  // Naming Merlin correctly wins it for Evil; naming Gawain wins it for
+  // Gawain alone -- a third faction, not "Evil, sort of" -- so the two
+  // need their own lines even though both start from the same 1-target
+  // guess. Anything else in that mode, or a wrong Lovers guess, is Good
+  // holding the win it already earned on the field.
+  let assassinationLine;
+  if (passed) {
+    assassinationLine = 'The Assassin passed — Good’s win stands.';
+  } else if (game.winner === 'gawain') {
+    assassinationLine = `The Assassin named ${targetNames} as Merlin — but that was Gawain! Gawain wins for himself.`;
+  } else {
+    assassinationLine = `The Assassin named ${targetNames}${guessedThePair ? ' as Tristan & Iseult' : ''} — ${
+      game.winner === 'evil' ? 'correct!' : 'incorrect.'
+    }`;
+  }
+
   return (
     <div className="phase-panel end-screen">
       <h2 className={`end-title end-title-${game.winner}`}>{winnerLabel} wins!</h2>
       <p className="phase-lead">
-        {game.winReason === 'assassination'
-          ? passed
-            ? 'The Assassin passed — Good’s win stands.'
-            : `The Assassin named ${targetNames}${guessedThePair ? ' as Tristan & Iseult' : ''} — ${
-                game.winner === 'evil' ? 'correct!' : 'incorrect.'
-              }`
-          : `Victory ${reasonText}.`}
+        {game.winReason === 'assassination' ? assassinationLine : `Victory ${reasonText}.`}
       </p>
 
       <h3 className="section-title">Full reveal</h3>
