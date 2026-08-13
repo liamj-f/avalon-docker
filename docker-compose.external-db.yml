@@ -26,7 +26,15 @@ services:
     restart: unless-stopped
     environment:
       PORT: 4000
-      DATABASE_URL: postgres://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@${DB_HOST:?set DB_HOST}:${DB_PORT:-5432}/${POSTGRES_DB:?set POSTGRES_DB}
+      # Handed down as discrete vars rather than a pre-assembled DATABASE_URL
+      # -- see backend/src/db.py:database_url() -- so a POSTGRES_PASSWORD
+      # containing a URL-special character (e.g. '@') can't silently corrupt
+      # the DSN via plain ${VAR} interpolation.
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      DB_HOST: ${DB_HOST:?set DB_HOST}
+      DB_PORT: ${DB_PORT:-5432}
       CORS_ORIGIN: "*"
       # The backend itself already retries the initial connection with
       # backoff (see backend/src/db.py:wait_for_db), so no depends_on/

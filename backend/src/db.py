@@ -7,6 +7,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 import asyncpg
 
@@ -15,6 +16,35 @@ logger = logging.getLogger("avalon.db")
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 
 _pool: asyncpg.Pool | None = None
+
+
+def database_url() -> str:
+    """Returns the Postgres DSN to connect with.
+
+    DATABASE_URL, if set, is used verbatim -- this is what local dev (see
+    README) points at an arbitrary Postgres. Otherwise the DSN is built
+    from the discrete POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB/DB_HOST/
+    DB_PORT vars, percent-encoding the user and password.
+
+    That encoding matters: docker-compose.yml and docker-compose.external-db.yml
+    deliberately hand these down as separate vars rather than pre-assembling
+    a postgres:// URL themselves, because plain `${VAR}` interpolation can't
+    escape anything -- a generated POSTGRES_PASSWORD containing a URL-special
+    character (most commonly '@') silently splits the DSN in the wrong place
+    (e.g. asyncpg reading a chunk of the password as the port), which fails
+    every connection attempt with a cryptic "invalid literal for int()" and
+    leaves the database without its migrations ever having run.
+    """
+    url = os.environ.get("DATABASE_URL")
+    if url:
+        return url
+
+    user = quote(os.environ["POSTGRES_USER"], safe="")
+    password = quote(os.environ["POSTGRES_PASSWORD"], safe="")
+    host = os.environ.get("DB_HOST", "db")
+    port = os.environ.get("DB_PORT", "5432")
+    database = os.environ["POSTGRES_DB"]
+    return f"postgres://{user}:{password}@{host}:{port}/{database}"
 
 
 async def _init_connection(conn: asyncpg.Connection) -> None:
@@ -34,7 +64,7 @@ async def get_pool() -> asyncpg.Pool:
     global _pool
     if _pool is None:
         _pool = await asyncpg.create_pool(
-            dsn=os.environ["DATABASE_URL"],
+            dsn=database_url(),
             init=_init_connection,
             min_size=1,
             max_size=10,
