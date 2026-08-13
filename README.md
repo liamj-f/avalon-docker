@@ -360,9 +360,12 @@ pick one or the other, never both.
   (the standard Avalon rule — vote rejections don't fail a quest by
   themselves, only the vote *track* running out).
 - **Good needs 3 successful missions** *and*, if the Assassin is in play,
-  the Assassin failing to name a winning target afterwards (Merlin, Gawain,
-  or the Tristan & Iseult pair — see below; if the Assassin isn't in play,
-  3 successes wins outright).
+  the Assassin's final guess not landing on a winning target afterwards
+  (Merlin, or the Tristan & Iseult pair — see below; if the Assassin isn't
+  in play, 3 successes wins outright). **Naming Gawain specifically is a
+  third outcome, not a Good win** — see the design note below; Good only
+  keeps its win when the Assassin names neither Merlin, Gawain, nor the
+  correct pair, or passes outright.
 
 ### Design note: Tristan & Iseult
 
@@ -377,34 +380,45 @@ where one of them can secretly be Evil, that function is the place to change it.
 Originally the Assassin had exactly one way to win: name Merlin correctly.
 The real mechanic is a genuine three-way choice, and Evil only wins if the
 guess matches the *chosen mode's* win condition exactly — not "any correct
-name wins," but "commit to a shape, then match it precisely."
-`005_excalibur_view_and_assassin_rework.sql` and
-`006_assassin_pass_mode.sql` implement all three as one
-`sp_submit_assassination` call, distinguished purely by how many seats are
-named (0, 1, or 2):
+name wins," but "commit to a shape, then match it precisely." Naming
+Gawain in the Merlin-guess mode is **not** one of Evil's winning shapes —
+Gawain is a third faction with his own win condition, entirely separate
+from Evil's, even though both start from the same 1-target guess.
+`007_gawain_own_win.sql` (correcting a real mechanical error introduced in
+`006_assassin_pass_mode.sql`, which folded a Gawain hit into Evil's win)
+implements all three modes as one `sp_submit_assassination` call,
+distinguished by how many seats are named (0, 1, or 2), and now tracks a
+three-way `winner` (`good` / `evil` / `gawain`) rather than the usual two:
 
-- **Guess Merlin** (name exactly 1 seat): correct if it's Merlin, **or**
-  Gawain if he's in play. **Gawain (`GAWAIN` in `roles.py`) only ever wins
-  in this single-target mode** — a plain Good role with no special
-  knowledge of his own, whose sole mechanical purpose is being a second
-  acceptable answer here, never a valid answer in the pair mode below.
-  Both Merlin and Gawain can be in play at once; naming *either* seat
-  wins for Evil in this mode. This also means the Assassin no longer
-  strictly requires Merlin — a table could run Gawain (or the pair, below)
-  as Merlin's sole replacement for a harder, magic-free variant.
-  `validate_settings` requires *at least one* of Merlin/Gawain/the Tristan
-  & Iseult pair to be in play whenever the Assassin is, rather than
-  hard-requiring Merlin specifically. **The Assassin's own screen never
-  says any of this, on purpose**: from the player's seat, the target is
-  always "whoever you believe is Merlin" — Gawain winning too is a
-  mechanical fact for the *server* to check, not something the UI should
-  hint at, since the Assassin isn't trying to identify Gawain and telling
-  them he's a valid alternate answer would just be an unearned nudge.
-- **Guess the Lovers** (name exactly 2 seats): correct only if they're
-  exactly `{tristan_seat, iseult_seat}` — proof the Assassin cracked the
-  secret couple, not just got lucky on one of two Loyal Servants. Naming
-  only one of them (with or without a second, wrong, decoy) does **not**
-  win.
+- **Guess Merlin** (name exactly 1 seat): three possible outcomes.
+  - Named seat is Merlin → **Evil wins**.
+  - Named seat is Gawain (`GAWAIN` in `roles.py`) → **Gawain wins, alone**
+    — not a win for the Evil team, a separate faction's own win condition.
+    Gawain is a plain Good role with no special knowledge of his own,
+    whose sole mechanical purpose is being a second possible answer here
+    — never a valid answer in the pair mode below.
+  - Named seat is anyone else → **Good wins** (their win from 3 successful
+    missions stands).
+  Both Merlin and Gawain can be in play at once. This also means the
+  Assassin no longer strictly requires Merlin — a table could run Gawain
+  (or the pair, below) as Merlin's sole replacement for a harder,
+  magic-free variant. `validate_settings` requires *at least one* of
+  Merlin/Gawain/the Tristan & Iseult pair to be in play whenever the
+  Assassin is, rather than hard-requiring Merlin specifically. **The
+  Assassin's own screen never says any of this, on purpose**: from the
+  player's seat, the target is always "whoever you believe is Merlin" —
+  Gawain being a possible answer, and what happens if he's the one named,
+  is a mechanical fact for the *server* to check, not something the UI
+  should hint at, since the Assassin isn't trying to identify Gawain and
+  telling them he's a valid alternate answer would just be an unearned
+  nudge.
+- **Guess the Lovers** (name exactly 2 seats): only two possible outcomes,
+  Evil or Good — **Gawain has no win condition in this mode**, even if the
+  Assassin happens to name him as one of the two. Correct only if the two
+  named are exactly `{tristan_seat, iseult_seat}` — proof the Assassin
+  cracked the secret couple, not just got lucky on one of two Loyal
+  Servants. Naming only one of them (with or without a second, wrong,
+  decoy) does **not** win, and resolves as a Good win.
 - **Pass** (name nobody): always resolves as Good's win, immediately, with
   nothing revealed — no card is checked against anyone, and nobody gets
   marked `was_assassinated`. This is a real third choice, not just "an
@@ -423,10 +437,14 @@ sets that mode's required count, clearing any in-progress selection from
 the other mode so a stale pick can't carry over. When the pair isn't in
 play there's only ever one mode, so the cards don't show — just the plain
 "select 1 player" picker. A "Pass" button is always available regardless
-of mode, submitting zero targets. `EndScreen` handles all three outcomes
-with one generic message — names whoever was guessed and says whether it
-was correct, or says the Assassin passed —
-without hard-coding which mode was actually used.
+of mode, submitting zero targets. `EndScreen` now distinguishes all three
+`winner` values with their own title and colour (Good/Evil's usual
+green/red, Gawain a distinct gold) and its own line per outcome — a
+correct Merlin guess reads "correct!", a Gawain hit spells out explicitly
+that the named seat was Gawain and that he wins for himself (still without
+ever naming him anywhere *before* the reveal), and anything else — a wrong
+guess or a pass — reads as Good's win holding, all without hard-coding
+which mode was actually used to get there.
 
 ### Design note: Lady of the Lake
 
@@ -739,10 +757,12 @@ against a real local Postgres 16 and the real backend process (not mocks):
   required "Lancelot's reverse evaluates after Excalibur's swap" ordering.
 - **Gawain & the Assassin's three modes**: verified with forced roles
   (again via `psql`, since a specific role landing on a specific seat isn't
-  reachable through normal random dealing) — naming Gawain instead of
-  Merlin correctly wins for Evil; naming both Tristan and Iseult correctly
-  wins for Evil (`assassinationTargets` comes back as both seats); naming
-  only one of the pair plus an unrelated decoy seat does **not** win; and
+  reachable through normal random dealing) — naming Gawain in the
+  Merlin-guess mode resolves `winner = 'gawain'`, distinct from both
+  `'good'` and `'evil'` (see the follow-up bullet below — this was wrong
+  in an earlier round); naming both Tristan and Iseult correctly wins for
+  Evil (`assassinationTargets` comes back as both seats); naming only one
+  of the pair plus an unrelated decoy seat does **not** win; and
   passing (naming nobody) always resolves as Good's win with
   `assassinationTargets` empty and zero `game_players` rows flagged
   `was_assassinated` (confirmed directly against Postgres, not just the
@@ -754,6 +774,21 @@ against a real local Postgres 16 and the real backend process (not mocks):
   the two sides were different array element types (`INT[]` vs implicit
   `SMALLINT[]`) — invisible without actually exercising that code path
   end-to-end, which is exactly what this test did before it ever shipped.
+- **Gawain wins for himself, not Evil (`007_gawain_own_win.sql`)**: an
+  earlier round had `sp_submit_assassination` treat a Gawain hit as just
+  another way for Evil to win (`winner = 'evil'`), which is wrong — Gawain
+  is a third faction with his own win condition. Verified with a real,
+  unforced 5-player game played start to finish through the actual UI
+  (5 real browser contexts, Playwright): enabled Gawain, played 3
+  quests to a real win, let the Assassin name the seat that (from that
+  seat's own real `RoleCard`) turned out to be Gawain, and confirmed the
+  `game_over` screen reads **"Gawain wins!"** in its own gold color — not
+  "Evil wins!" — with the reason line spelling out that the named seat was
+  Gawain rather than the generic "correct!" a Merlin hit gets, and the
+  full reveal row still correctly tagging that seat both `Gawain` and
+  `ASSASSINATED`. Confirmed the same fix doesn't regress an actual Merlin
+  hit (still `winner = 'evil'`, "correct!") or the Lovers mode (Gawain
+  never wins there even if named, per the corrected procedure).
 - **Role preference poll and host transfer**: both verified over real
   sockets (vote tallies update live and don't affect actual settings; host
   status correctly moves between players).
