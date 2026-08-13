@@ -628,21 +628,36 @@ as "what's on, and whose side is it" at a glance. Purely a CSS/JSX change
 in `Lobby.jsx`/`styles.css` — no behavior changed, same `toggleSetting`
 click handler as before.
 
-### Design note: Themed avatar icons
+### Design note: Heraldic shield avatars
 
-`PlayerAvatar.jsx` used to show a player's own initials in the circle.
-Replaced with a fixed, on-theme icon per **seat** (`SEAT_ICONS` — 🛡️ 🏰 🐉
-🦁 🦅 🐺 🦌 🐎 📯 🕊️, one of the 10 possible seats, `seat % 10`) — every
-seat shows the same icon all game, same stable per-player identity cue the
-initials used to give, just no longer plain text. Picked deliberately
-disjoint from every *functional* emoji marker used elsewhere (👑 leader,
-⚔️ Excalibur, ✅❌🔄 quest cards, 🏳️ pass, 👁️ view, ✨ use Excalibur, 🌊 Lady
-of the Lake, 🔀 Lancelot swap) so a seat's icon can never be mistaken for
-one of those badges. The leader crown in particular is untouched — it's
-still its own small badge absolutely positioned above the circle
-(`.avatar-crown`), not merged into or replacing the seat icon underneath
-it, so a leader's seat icon and their "you're the leader" marker both stay
-independently readable. The display name underneath is unchanged.
+`PlayerAvatar.jsx` went through two icon designs before landing here: first
+plain initials, then a grab-bag of on-theme but unrelated emoji (castle,
+dragon, lion, ...). Both got replaced with an actual small coat of arms
+per **seat** — a hand-drawn heater-shield `<svg>`, differenced the way
+real heraldry differences a family's arms for a relation, rather than 10
+unrelated pictures: 5 base tinctures (`TINCTURES` — Or/gold, Azure/blue,
+Gules/red, Vert/green, Argent/silver) shown plain for seats 0-4, and the
+same 5 shown again with a bend (a wide diagonal band, clipped to the
+shield's own outline via an `<svg>` `clipPath`) for seats 5-9 — 10 unique,
+unmistakably shield-shaped icons for the 10 possible seats, every one
+still on-theme. Every seat shows the same shield the whole game, same
+stable per-player identity cue plain initials used to give.
+
+Picked deliberately disjoint from every *functional* emoji marker used
+elsewhere (👑 leader, ⚔️ Excalibur, ✅❌🔄 quest cards, 🏳️ pass, 👁️ view,
+✨ use Excalibur, 🌊 Lady of the Lake, 🔀 Lancelot swap) so a seat's shield
+can never be mistaken for one of those badges. The leader crown in
+particular is untouched — it's still its own small badge absolutely
+positioned above the shield (`.avatar-crown`), not merged into or
+replacing it, so a leader's shield and their "you're the leader" marker
+both stay independently readable. "You" used to get a solid gold circle
+background; since the shield now owns that space, "you" is instead a
+gold `drop-shadow` glow around your own shield specifically. Each
+`<svg>`'s `clipPath` gets a React `useId()`-generated id rather than one
+keyed off the seat number, since the same seat's avatar can legitimately
+render more than once at once (e.g. in both `TeamBuilder` and
+`VoteHistory` simultaneously) — duplicate DOM ids would otherwise result.
+The display name underneath is unchanged.
 
 ### Design note: Quest-themed backgrounds
 
@@ -851,6 +866,14 @@ against a real local Postgres 16 and the real backend process (not mocks):
   new seat icons render distinctly per seat, stay stable across a phase
   change, and that a leader's crown badge sits cleanly separate from their
   seat icon rather than overlapping or replacing it.
+- **Heraldic shield avatars, visually**: filled a real 10-player lobby (the
+  full seat range) and screenshotted the resulting avatar grid — all 10
+  shields render as distinct, unmistakably shield-shaped icons: 5 clearly
+  different colors (tinctures) plain, then the same 5 colors again with
+  the diagonal bend clearly visible on top. Confirmed the leader crown
+  still sits cleanly separate above the shield (no overlap, no visual
+  confusion with the bend), and that the "you" gold glow renders correctly
+  around the host's own shield specifically, not anyone else's.
 - **Quest-themed page/popup backgrounds, visually**: forced
   `games.mission_number` through all 5 values directly via `psql` (each
   followed by its own `pg_notify`, same as every other forced-state test
