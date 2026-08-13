@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import Awaitable, Callable
 
 import asyncpg
+
+from db import database_url
 
 logger = logging.getLogger("avalon.gameNotify")
 
@@ -54,7 +55,7 @@ class GameListener:
                 await asyncio.sleep(RECONNECT_DELAY_SECONDS)
 
     async def _connect_and_listen(self) -> None:
-        conn = await asyncpg.connect(dsn=os.environ["DATABASE_URL"])
+        conn = await asyncpg.connect(dsn=database_url())
         self._conn = conn
         try:
             def on_notify(connection: asyncpg.Connection, pid: int, channel: str, payload: str) -> None:
