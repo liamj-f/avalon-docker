@@ -1097,6 +1097,10 @@ button.mission-pip:hover {
   color: var(--evil);
 }
 
+.end-title-gawain {
+  color: var(--gold-bright);
+}
+
 .reveal-list {
   list-style: none;
   padding: 0;

@@ -13,10 +13,14 @@ export default function AssassinPanel({ room, onAssassinate }) {
   // since that's the only mode at all when the pair isn't in play.
   //
   // Gawain is deliberately never mentioned here even when he's in play:
-  // he's a valid winning answer in this mode server-side
-  // (sp_submit_assassination), but the Assassin is always trying to
-  // identify Merlin specifically, never "Merlin or Gawain" as a target --
-  // surfacing him here would just be an unearned hint.
+  // naming him in "guess Merlin" mode wins the game for Gawain himself,
+  // not Evil (sp_submit_assassination tracks that as its own `winner`,
+  // separate from a correct Merlin guess) -- but the Assassin is always
+  // trying to identify Merlin specifically, never "Merlin or Gawain" as a
+  // target, so surfacing him here would just be an unearned hint. That's
+  // also why the framing below only ever promises Evil the win for a
+  // correct guess, never for "any guess that matches the mode" -- naming
+  // Gawain matches the mode's shape but isn't Evil's win.
   const [mode, setMode] = useState('merlin');
   const [targets, setTargets] = useState([]);
   const modeTargetCount = mode === 'lovers' ? 2 : 1;
@@ -48,7 +52,8 @@ export default function AssassinPanel({ room, onAssassinate }) {
       {isAssassin && (
         <>
           <p className="phase-lead">
-            Evil wins only if the guess matches the mode exactly{hasPairRoute ? ' — pick one below.' : '.'}
+            Name the wrong person and Good&rsquo;s win stands. Evil only wins outright with a correct guess
+            {hasPairRoute ? ' — pick a mode below.' : '.'}
           </p>
 
           {hasPairRoute && (
