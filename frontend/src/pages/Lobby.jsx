@@ -101,10 +101,16 @@ export default function Lobby() {
         <div className="section-title-row">
           <h2 className="section-title">Roles</h2>
           {you?.isHost && (
-            <label className="hide-toggle">
-              <input type="checkbox" checked={!!rolesHidden} onChange={toggleHideSelections} />
+            <button
+              type="button"
+              className="hide-toggle"
+              role="switch"
+              aria-checked={!!rolesHidden}
+              onClick={toggleHideSelections}
+            >
+              <span className={`role-toggle-switch ${rolesHidden ? 'role-toggle-switch-on' : ''}`} aria-hidden="true" />
               Hide selections from other players
-            </label>
+            </button>
           )}
         </div>
         <p className="hint">
