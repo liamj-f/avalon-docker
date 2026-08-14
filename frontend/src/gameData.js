@@ -110,7 +110,7 @@ export const EXTENSION_TOGGLES = [
     key: 'excalibur',
     name: 'Excalibur',
     description:
-      'Each team’s leader hands Excalibur to someone else on that team before the vote — everyone sees who. Once the quest’s cards are in, the holder sees every real card and may flip exactly one player’s card, once per game.',
+      'Each team’s leader hands Excalibur to someone else on that team before the vote — everyone sees who. Once the quest’s cards are in, the holder secretly views one selected player’s card and may flip it, once per game.',
   },
 ];
 
