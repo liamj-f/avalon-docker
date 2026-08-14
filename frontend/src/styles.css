@@ -349,6 +349,16 @@ button {
   opacity: 0.5;
 }
 
+.player-shield {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.player-shield-dim {
+  opacity: 0.45;
+}
+
 .player-dot {
   width: 8px;
   height: 8px;
