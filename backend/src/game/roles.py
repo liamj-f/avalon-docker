@@ -154,12 +154,12 @@ TOGGLEABLE_ROLES = [
 
 def default_settings() -> dict[str, bool]:
     return {
-        "merlin": True,
-        "percival": True,
-        "morgana": True,
+        "merlin": False,
+        "percival": False,
+        "morgana": False,
         "mordred": False,
         "oberon": False,
-        "assassin": True,
+        "assassin": False,
         "agravain": False,
         "arthur": False,
         "gawain": False,
