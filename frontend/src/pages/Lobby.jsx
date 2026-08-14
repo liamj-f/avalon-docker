@@ -38,7 +38,6 @@ export default function Lobby() {
         <div key={r.key} className={`role-toggle role-toggle-${r.team || 'neutral'} ${active ? 'active' : ''}`}>
           <button type="button" className="role-toggle-main" onClick={() => toggleSetting(r.key)} disabled={!you?.isHost}>
             <div className="role-toggle-head">
-              <span className={`role-toggle-switch ${active ? 'role-toggle-switch-on' : ''}`} aria-hidden="true" />
               <span className="role-toggle-name">{r.name}</span>
               {r.team && <span className={`team-chip team-chip-${r.team}`}>{r.team}</span>}
             </div>
@@ -101,10 +100,16 @@ export default function Lobby() {
         <div className="section-title-row">
           <h2 className="section-title">Roles</h2>
           {you?.isHost && (
-            <label className="hide-toggle">
-              <input type="checkbox" checked={!!rolesHidden} onChange={toggleHideSelections} />
+            <button
+              type="button"
+              className="hide-toggle"
+              role="switch"
+              aria-checked={!!rolesHidden}
+              onClick={toggleHideSelections}
+            >
+              <span className={`role-toggle-switch ${rolesHidden ? 'role-toggle-switch-on' : ''}`} aria-hidden="true" />
               Hide selections from other players
-            </label>
+            </button>
           )}
         </div>
         <p className="hint">
