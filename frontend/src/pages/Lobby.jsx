@@ -36,9 +36,14 @@ export default function Lobby() {
       const active = !!settings[r.key];
       return (
         <div key={r.key} className={`role-toggle role-toggle-${r.team || 'neutral'} ${active ? 'active' : ''}`}>
-          <button type="button" className="role-toggle-main" onClick={() => toggleSetting(r.key)} disabled={!you?.isHost}>
+          <button
+            type="button"
+            className="role-toggle-main"
+            aria-pressed={active}
+            onClick={() => toggleSetting(r.key)}
+            disabled={!you?.isHost}
+          >
             <div className="role-toggle-head">
-              <span className={`role-toggle-switch ${active ? 'role-toggle-switch-on' : ''}`} aria-hidden="true" />
               <span className="role-toggle-name">{r.name}</span>
               {r.team && <span className={`team-chip team-chip-${r.team}`}>{r.team}</span>}
             </div>

@@ -490,22 +490,6 @@ button {
   background: #26200f;
 }
 
-.role-toggle-good .role-toggle-switch-on {
-  background: var(--good);
-}
-
-.role-toggle-good .role-toggle-switch-on::after {
-  background: #0c1830;
-}
-
-.role-toggle-evil .role-toggle-switch-on {
-  background: var(--evil);
-}
-
-.role-toggle-evil .role-toggle-switch-on::after {
-  background: #2a0d0d;
-}
-
 .role-toggle-name {
   font-weight: 600;
 }
