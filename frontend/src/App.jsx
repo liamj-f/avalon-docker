@@ -8,20 +8,19 @@ import QuestThemeArt from './components/QuestThemeArt.jsx';
 import PwaUpdatePrompt from './PwaUpdatePrompt.jsx';
 import { ROLE_TOGGLES, EXTENSION_TOGGLES, QUEST_FLAVOR } from './gameData.js';
 
-const DEFAULT_ROSTER_TEXT = 'Merlin · Percival · Morgana · Mordred · Oberon · Assassin · Tristan & Iseult';
 const FULL_ROSTER = [...ROLE_TOGGLES, ...EXTENSION_TOGGLES];
 
-// The footer used to always show that fixed default list, regardless of
-// what a given room actually enabled -- misleading as soon as a game used
-// Agravain, Arthur, Lancelot, Guinevere, or just left something off. This
-// derives the real roster from the room's settings instead, live. Falls
-// back to the generic list only pre-room (Home screen, nothing to reflect
-// yet) or when the host has hidden selections from this viewer (settings
-// arrive blanked in that case -- see rooms.py's serialize_for_token).
+// The footer used to always show a fixed default list, regardless of what a
+// given room actually enabled -- misleading as soon as a game used Agravain,
+// Arthur, Lancelot, Guinevere, or just left something off. This derives the
+// real roster from the room's settings instead, live. Returns null pre-room
+// (Home screen -- no room to reflect yet, so no footer at all) or when the
+// host has hidden selections from this viewer (settings arrive blanked in
+// that case -- see rooms.py's serialize_for_token).
 function rosterText(room) {
-  if (!room?.settings) return DEFAULT_ROSTER_TEXT;
+  if (!room?.settings) return null;
   const active = FULL_ROSTER.filter((r) => room.settings[r.key]).map((r) => r.name);
-  return active.length > 0 ? active.join(' · ') : DEFAULT_ROSTER_TEXT;
+  return active.length > 0 ? active.join(' · ') : null;
 }
 
 export default function App() {
@@ -61,6 +60,7 @@ export default function App() {
   // than reading past the end of QUEST_FLAVOR.
   const questTheme =
     room?.phase === 'in_game' ? QUEST_FLAVOR[Math.min(room.game.missionNumber, 4)].theme : null;
+  const roster = rosterText(room);
 
   return (
     <div className="app-shell">
@@ -103,9 +103,11 @@ export default function App() {
         {room && room.phase === 'in_game' && <Game />}
       </main>
 
-      <footer className="app-footer">
-        <span>{rosterText(room)}</span>
-      </footer>
+      {roster && (
+        <footer className="app-footer">
+          <span>{roster}</span>
+        </footer>
+      )}
     </div>
   );
 }
