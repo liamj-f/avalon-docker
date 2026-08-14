@@ -1,6 +1,7 @@
 import React from 'react';
 import { useGame } from '../store.jsx';
 import { ROLE_TOGGLES, EXTENSION_TOGGLES, validateSettingsClient } from '../gameData.js';
+import { PlayerShield } from '../components/PlayerAvatar.jsx';
 
 export default function Lobby() {
   const { state, updateSettings, startGame, leaveRoom, setRolePreference, transferHost } = useGame();
@@ -84,6 +85,9 @@ export default function Lobby() {
         <ul className="player-list">
           {players.map((p) => (
             <li key={p.seat} className={`player-row ${p.connected ? '' : 'player-disconnected'}`}>
+              <span className="player-shield" aria-hidden="true">
+                <PlayerShield seat={p.seat} size={28} dim={!p.connected} />
+              </span>
               <span className="player-dot" data-connected={p.connected} />
               <span className="player-name">{p.displayName}</span>
               {p.isHost && <span className="badge">Host</span>}

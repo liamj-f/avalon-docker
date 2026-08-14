@@ -17,11 +17,32 @@ import React, { useId } from 'react';
 const TINCTURES = ['#d9b464', '#4f8fe8', '#c0433f', '#4c9a6a', '#c9d3e0'];
 const SHIELD_PATH = 'M32,8 L56,8 L56,36 C56,54 46,64 32,70 C18,64 8,54 8,36 L8,8 Z';
 
-export default function PlayerAvatar({ player, isLeader, isOnTeam, isSelected, isYou, knownLabel, revealTeam, onClick, selectable }) {
+// The shield graphic on its own, for spots that just want the per-seat
+// heraldry (e.g. the lobby's player list) without the full avatar-chip
+// (name, crown, selection state) that PlayerAvatar below wraps it in.
+export function PlayerShield({ seat, size = 36, dim }) {
   const clipId = useId();
-  const tincture = TINCTURES[player.seat % TINCTURES.length];
-  const hasBend = Math.floor(player.seat / TINCTURES.length) % 2 === 1;
+  const tincture = TINCTURES[seat % TINCTURES.length];
+  const hasBend = Math.floor(seat / TINCTURES.length) % 2 === 1;
 
+  return (
+    <svg viewBox="0 0 64 76" width={size} height={size} className={dim ? 'player-shield-dim' : undefined}>
+      <defs>
+        <clipPath id={clipId}>
+          <path d={SHIELD_PATH} />
+        </clipPath>
+      </defs>
+      <path d={SHIELD_PATH} fill={tincture} stroke="#0f1420" strokeWidth="2.5" />
+      {hasBend && (
+        <g clipPath={`url(#${clipId})`}>
+          <rect x="-20" y="28" width="100" height="18" fill="#0f1420" transform="rotate(-35 32 39)" />
+        </g>
+      )}
+    </svg>
+  );
+}
+
+export default function PlayerAvatar({ player, isLeader, isOnTeam, isSelected, isYou, knownLabel, revealTeam, onClick, selectable }) {
   const classes = ['avatar-chip'];
   if (isLeader) classes.push('avatar-leader');
   if (isOnTeam) classes.push('avatar-on-team');
@@ -35,19 +56,7 @@ export default function PlayerAvatar({ player, isLeader, isOnTeam, isSelected, i
     <button type="button" className={classes.join(' ')} onClick={onClick} disabled={!selectable}>
       {isLeader && <span className="avatar-crown" title="Leader">👑</span>}
       <span className="avatar-circle" aria-hidden="true">
-        <svg viewBox="0 0 64 76" width="36" height="36">
-          <defs>
-            <clipPath id={clipId}>
-              <path d={SHIELD_PATH} />
-            </clipPath>
-          </defs>
-          <path d={SHIELD_PATH} fill={tincture} stroke="#0f1420" strokeWidth="2.5" />
-          {hasBend && (
-            <g clipPath={`url(#${clipId})`}>
-              <rect x="-20" y="28" width="100" height="18" fill="#0f1420" transform="rotate(-35 32 39)" />
-            </g>
-          )}
-        </svg>
+        <PlayerShield seat={player.seat} />
       </span>
       <span className="avatar-name">{player.displayName}</span>
       {knownLabel && <span className="avatar-tag">{knownLabel}</span>}
