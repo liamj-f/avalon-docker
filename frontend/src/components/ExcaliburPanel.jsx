@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import PlayerAvatar from './PlayerAvatar.jsx';
+import StuckPhaseNotice from './StuckPhaseNotice.jsx';
 
 const CARD_LABEL = { success: '✅ Success', fail: '❌ Fail', reverse: '🔄 Reverse' };
 
@@ -63,15 +64,11 @@ export default function ExcaliburPanel({ room, onView, onDecide, onForceDecline 
       )}
 
       {you.isHost && !isHolder && holder && !holder.connected && (
-        <div className="stuck-mission-notice">
-          <p className="hint">
-            {holderName} is disconnected and can&rsquo;t decide. You can force it through — this always resolves as
-            declining to use Excalibur, never a forced swap of anyone&rsquo;s card.
-          </p>
-          <button type="button" className="btn btn-ghost" onClick={onForceDecline}>
-            ⚡ Force-resolve: decline Excalibur
-          </button>
-        </div>
+        <StuckPhaseNotice
+          message={`${holderName} is disconnected and can't decide. You can force it through — this always resolves as declining to use Excalibur, never a forced swap of anyone's card.`}
+          buttonLabel="Force-resolve: decline Excalibur"
+          onClick={onForceDecline}
+        />
       )}
 
       {isHolder && !viewing && (

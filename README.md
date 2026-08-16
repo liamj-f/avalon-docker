@@ -334,6 +334,7 @@ backend/
     test_game_flow.py            # team-vote/mission loop to each win condition
     test_assassination.py          # all 3 sp_submit_assassination modes, incl. the Gawain regression
     test_force_resolve.py            # the host "stuck phase" escape hatches (see design note below)
+    test_roles.py                      # game/roles.py: dependency validation, dealing, knowledge -- pure Python, no DB
   migrations/
     001_schema.sql        # every table: games, game_players, game_missions, team_proposals,
                            # team_votes, mission_cards, lady_of_lake_events, excalibur_events,

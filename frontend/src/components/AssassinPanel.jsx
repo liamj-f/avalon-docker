@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import PlayerAvatar from './PlayerAvatar.jsx';
+import StuckPhaseNotice from './StuckPhaseNotice.jsx';
 
 export default function AssassinPanel({ room, onAssassinate, onForcePass }) {
   const { game, players, you } = room;
@@ -112,16 +113,11 @@ export default function AssassinPanel({ room, onAssassinate, onForcePass }) {
       )}
 
       {you.isHost && !isAssassin && game.assassinDisconnected && (
-        <div className="stuck-mission-notice">
-          <p className="hint">
-            The Assassin is disconnected. You can force this through — it always resolves as a Pass (Good&rsquo;s win
-            stands), the same as the Assassin choosing not to guess. There&rsquo;s no way to force a name on their
-            behalf — nobody but the Assassin themselves knows who they are.
-          </p>
-          <button type="button" className="btn btn-ghost" onClick={onForcePass}>
-            ⚡ Force-resolve: pass
-          </button>
-        </div>
+        <StuckPhaseNotice
+          message="The Assassin is disconnected. You can force this through — it always resolves as a Pass (Good's win stands), the same as the Assassin choosing not to guess. There's no way to force a name on their behalf — nobody but the Assassin themselves knows who they are."
+          buttonLabel="Force-resolve: pass"
+          onClick={onForcePass}
+        />
       )}
     </div>
   );
