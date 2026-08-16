@@ -51,12 +51,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION sp_propose_team(p_game_id UUID, p_leader_seat INT, p_team INT[])
-RETURNS VOID AS $$
+-- p_excalibur_seat: the OTHER player (never the leader) on this team the
+-- leader is designating to hold Excalibur for this quest -- required iff
+-- Excalibur is enabled and not yet spent for the game, ignored otherwise.
+-- Visible to everyone before they vote on the team.
+CREATE OR REPLACE FUNCTION sp_propose_team(
+    p_game_id UUID, p_leader_seat INT, p_team INT[],
+    p_excalibur_seat INT DEFAULT NULL
+) RETURNS VOID AS $$
 DECLARE
     g games%ROWTYPE;
     mc mission_config%ROWTYPE;
     expected_size SMALLINT;
+    excalibur_active BOOLEAN;
 BEGIN
     SELECT * INTO g FROM games WHERE id = p_game_id FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'Game not found.'; END IF;
@@ -74,7 +81,26 @@ BEGIN
         RAISE EXCEPTION 'Team includes an unknown seat.';
     END IF;
 
-    UPDATE games SET proposed_team = p_team, phase = 'team_voting' WHERE id = p_game_id;
+    excalibur_active := (g.settings->>'excalibur')::boolean AND NOT g.excalibur_used;
+    IF excalibur_active THEN
+        IF p_excalibur_seat IS NULL THEN
+            RAISE EXCEPTION 'Choose who holds Excalibur for this quest.';
+        END IF;
+        IF p_excalibur_seat = p_leader_seat THEN
+            RAISE EXCEPTION 'The leader cannot hold Excalibur themselves -- pick someone else on the team.';
+        END IF;
+        IF p_excalibur_seat <> ALL(p_team) THEN
+            RAISE EXCEPTION 'Excalibur must go to a player on the proposed team.';
+        END IF;
+    ELSE
+        p_excalibur_seat := NULL;
+    END IF;
+
+    INSERT INTO team_proposals (game_id, mission_number, attempt, leader_seat, team_seats, excalibur_seat)
+    VALUES (p_game_id, g.mission_number, g.rejection_count, p_leader_seat, to_jsonb(p_team), p_excalibur_seat);
+
+    UPDATE games SET proposed_team = p_team, phase = 'team_voting', excalibur_holder_seat = p_excalibur_seat
+        WHERE id = p_game_id;
     PERFORM pg_notify('avalon_game_updates', p_game_id::text);
 END;
 $$ LANGUAGE plpgsql;
@@ -179,17 +205,15 @@ BEGIN
         RETURN;
     END IF;
 
-    -- The Reverse card replaces its player's vote entirely — it never
-    -- itself counts toward the fail tally, only toward flipping the
-    -- outcome afterward (handled in _resolve_mission).
-    SELECT COUNT(*) FILTER (WHERE NOT success AND NOT reversed) INTO fail_count
-        FROM mission_cards WHERE game_id = p_game_id AND mission_number = g.mission_number;
-
-    IF (g.settings->>'excalibur')::boolean AND g.excalibur_holder_seat IS NOT NULL
-       AND NOT g.excalibur_used AND fail_count >= 1 THEN
-        -- Hand the decision to the Excalibur holder instead of resolving immediately.
-        UPDATE games SET phase = 'excalibur_decision', pending_fail_count = fail_count WHERE id = p_game_id;
+    -- Excalibur looks at *every* quest (not just ones that already came
+    -- back with a Fail) as long as it's assigned and unspent -- the holder
+    -- can flip any one participant's card either direction, not just
+    -- cleanse a Fail. See sp_excalibur_view/sp_excalibur_decision.
+    IF (g.settings->>'excalibur')::boolean AND g.excalibur_holder_seat IS NOT NULL AND NOT g.excalibur_used THEN
+        UPDATE games SET phase = 'excalibur_decision' WHERE id = p_game_id;
     ELSE
+        SELECT COUNT(*) FILTER (WHERE NOT success AND NOT reversed) INTO fail_count
+            FROM mission_cards WHERE game_id = p_game_id AND mission_number = g.mission_number;
         PERFORM _resolve_mission(p_game_id, fail_count);
     END IF;
 
@@ -197,29 +221,89 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION sp_excalibur_decision(p_game_id UUID, p_seat INT, p_use BOOLEAN)
+-- The holder picks ONE participant to look at, sees only that card, and
+-- only then decides (sp_excalibur_decision) whether to swap it -- they
+-- don't get to browse everyone's card first.
+CREATE OR REPLACE FUNCTION sp_excalibur_view(p_game_id UUID, p_seat INT, p_target_seat INT)
 RETURNS VOID AS $$
 DECLARE
     g games%ROWTYPE;
-    final_fail_count INT;
+BEGIN
+    SELECT * INTO g FROM games WHERE id = p_game_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Game not found.'; END IF;
+    IF g.phase <> 'excalibur_decision' THEN RAISE EXCEPTION 'Not in the Excalibur decision phase.'; END IF;
+    IF g.excalibur_holder_seat <> p_seat THEN RAISE EXCEPTION 'Only the Excalibur holder may view a card.'; END IF;
+    IF g.excalibur_viewing_seat IS NOT NULL THEN
+        RAISE EXCEPTION 'You have already viewed a card this quest.';
+    END IF;
+    IF p_target_seat <> ALL(g.proposed_team) THEN RAISE EXCEPTION 'Excalibur can only view a player on this quest.'; END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM mission_cards WHERE game_id = p_game_id AND mission_number = g.mission_number AND seat = p_target_seat
+    ) THEN
+        RAISE EXCEPTION 'That player has not played a card yet.';
+    END IF;
+
+    UPDATE games SET excalibur_viewing_seat = p_target_seat WHERE id = p_game_id;
+    PERFORM pg_notify('avalon_game_updates', p_game_id::text);
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION sp_excalibur_decision(
+    p_game_id UUID, p_seat INT, p_use BOOLEAN,
+    p_new_success BOOLEAN DEFAULT NULL -- only consulted when the viewed card is Lancelot's Reverse card
+) RETURNS VOID AS $$
+DECLARE
+    g games%ROWTYPE;
+    target_card mission_cards%ROWTYPE;
+    v_new_success BOOLEAN;
+    fail_count INT;
 BEGIN
     SELECT * INTO g FROM games WHERE id = p_game_id FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'Game not found.'; END IF;
     IF g.phase <> 'excalibur_decision' THEN RAISE EXCEPTION 'Not in the Excalibur decision phase.'; END IF;
     IF g.excalibur_holder_seat <> p_seat THEN RAISE EXCEPTION 'Only the Excalibur holder may decide this.'; END IF;
+    IF g.excalibur_viewing_seat IS NULL THEN RAISE EXCEPTION 'View a card before deciding.'; END IF;
 
-    final_fail_count := g.pending_fail_count - (CASE WHEN p_use THEN 1 ELSE 0 END);
+    SELECT * INTO target_card FROM mission_cards
+        WHERE game_id = p_game_id AND mission_number = g.mission_number AND seat = g.excalibur_viewing_seat;
 
-    INSERT INTO excalibur_events (game_id, mission_number, holder_seat, used, fail_count_before, fail_count_after)
-    VALUES (p_game_id, g.mission_number, p_seat, p_use, g.pending_fail_count, final_fail_count);
+    IF p_use THEN
+        IF target_card.reversed THEN
+            IF p_new_success IS NULL THEN
+                RAISE EXCEPTION 'Choose Success or Fail for the Reverse card.';
+            END IF;
+            v_new_success := p_new_success;
+        ELSE
+            v_new_success := NOT target_card.success;
+        END IF;
 
-    -- Excalibur is a single legendary use per game: spent once, gone for good.
+        UPDATE mission_cards SET success = v_new_success, reversed = false
+            WHERE game_id = p_game_id AND mission_number = g.mission_number AND seat = g.excalibur_viewing_seat;
+    END IF;
+
+    -- original_success/original_reversed are stored whether or not it was
+    -- used -- the holder saw the real card either way, and the target
+    -- already knew it (they're the one who played it).
+    INSERT INTO excalibur_events (
+        game_id, mission_number, holder_seat, used, target_seat,
+        original_success, original_reversed, new_success
+    ) VALUES (
+        p_game_id, g.mission_number, p_seat, p_use, g.excalibur_viewing_seat,
+        target_card.success, target_card.reversed, CASE WHEN p_use THEN v_new_success ELSE NULL END
+    );
+
+    -- Single legendary use per game: spent once, gone for good. Declining
+    -- doesn't spend it -- the *next* quest's leader assigns it again
+    -- (sp_propose_team) -- but either way this quest's holder/viewing state
+    -- is cleared so it doesn't linger as a stale display between quests.
     UPDATE games SET excalibur_used = excalibur_used OR p_use,
-                      excalibur_holder_seat = CASE WHEN p_use THEN NULL ELSE excalibur_holder_seat END,
-                      pending_fail_count = NULL
+                      excalibur_holder_seat = NULL,
+                      excalibur_viewing_seat = NULL
         WHERE id = p_game_id;
 
-    PERFORM _resolve_mission(p_game_id, final_fail_count);
+    SELECT COUNT(*) FILTER (WHERE NOT success AND NOT reversed) INTO fail_count
+        FROM mission_cards WHERE game_id = p_game_id AND mission_number = g.mission_number;
+    PERFORM _resolve_mission(p_game_id, fail_count);
     PERFORM pg_notify('avalon_game_updates', p_game_id::text);
 END;
 $$ LANGUAGE plpgsql;
@@ -334,13 +418,26 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION sp_submit_assassination(p_game_id UUID, p_seat INT, p_target_seat INT)
+-- The Assassin picks exactly one of three modes:
+--   1. Guess Merlin: name 1 seat. Correct if it's Merlin -> Evil wins.
+--      Naming Gawain instead (only ever a valid guess in this mode, never
+--      the pair mode below) wins for Gawain alone, not Evil -- he's a
+--      third faction with his own win condition, distinct from Evil's.
+--   2. Guess the Lovers: name exactly 2 seats. Correct only if they're
+--      exactly {Tristan, Iseult} -> Evil wins.
+--   3. Pass: name nobody. Always resolves Good's win as final -- no guess
+--      is made, so nothing is revealed and nobody is marked assassinated.
+CREATE OR REPLACE FUNCTION sp_submit_assassination(p_game_id UUID, p_seat INT, p_target_seats INT[])
 RETURNS VOID AS $$
 DECLARE
     g games%ROWTYPE;
     assassin_seat SMALLINT;
     merlin_seat SMALLINT;
-    hit_merlin BOOLEAN;
+    gawain_seat SMALLINT;
+    tristan_seat SMALLINT;
+    iseult_seat SMALLINT;
+    target_count INT;
+    result_winner VARCHAR(10);
 BEGIN
     SELECT * INTO g FROM games WHERE id = p_game_id FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'Game not found.'; END IF;
@@ -350,15 +447,53 @@ BEGIN
     IF assassin_seat IS NULL OR assassin_seat <> p_seat THEN
         RAISE EXCEPTION 'Only the Assassin may name a target.';
     END IF;
-    IF p_target_seat <> ALL(g.seat_order) THEN RAISE EXCEPTION 'Invalid target.'; END IF;
+
+    target_count := COALESCE(array_length(p_target_seats, 1), 0);
+    IF target_count NOT IN (0, 1, 2) THEN
+        RAISE EXCEPTION 'Pass (name nobody), guess Merlin (name one player), or guess the Lovers (name exactly two).';
+    END IF;
+    IF target_count > 0 THEN
+        IF (SELECT COUNT(DISTINCT x) FROM unnest(p_target_seats) x) <> target_count THEN
+            RAISE EXCEPTION 'Targets must be distinct.';
+        END IF;
+        IF EXISTS (SELECT 1 FROM unnest(p_target_seats) s WHERE s <> ALL(g.seat_order)) THEN
+            RAISE EXCEPTION 'Invalid target.';
+        END IF;
+    END IF;
 
     SELECT seat INTO merlin_seat FROM game_players WHERE game_id = p_game_id AND role = 'MERLIN';
-    hit_merlin := merlin_seat IS NOT NULL AND merlin_seat = p_target_seat;
+    SELECT seat INTO gawain_seat FROM game_players WHERE game_id = p_game_id AND role = 'GAWAIN';
+    SELECT seat INTO tristan_seat FROM game_players WHERE game_id = p_game_id AND role = 'TRISTAN';
+    SELECT seat INTO iseult_seat FROM game_players WHERE game_id = p_game_id AND role = 'ISEULT';
 
-    UPDATE game_players SET was_assassinated = true WHERE game_id = p_game_id AND seat = p_target_seat;
+    IF target_count = 0 THEN
+        result_winner := 'good'; -- pass forfeits the guess outright -- Good's win stands
+    ELSIF target_count = 1 THEN
+        IF COALESCE(p_target_seats[1] = merlin_seat, false) THEN
+            result_winner := 'evil';
+        ELSIF COALESCE(p_target_seats[1] = gawain_seat, false) THEN
+            result_winner := 'gawain';
+        ELSE
+            result_winner := 'good';
+        END IF;
+    ELSE
+        IF tristan_seat IS NOT NULL AND iseult_seat IS NOT NULL
+           AND p_target_seats <@ ARRAY[tristan_seat, iseult_seat]::INT[] THEN
+            result_winner := 'evil';
+        ELSE
+            result_winner := 'good'; -- Gawain has no win condition in this mode, win or lose
+        END IF;
+    END IF;
+
+    IF target_count > 0 THEN
+        -- Marks who was named, win or lose -- this column tracks "was the
+        -- Assassin's target", not "was the guess correct" (the frontend
+        -- derives the latter from `winner` itself).
+        UPDATE game_players SET was_assassinated = true WHERE game_id = p_game_id AND seat = ANY(p_target_seats);
+    END IF;
     UPDATE games SET phase = 'game_over',
-                      assassination_target = p_target_seat,
-                      winner = CASE WHEN hit_merlin THEN 'evil' ELSE 'good' END,
+                      assassination_target = p_target_seats,
+                      winner = result_winner,
                       win_reason = 'assassination',
                       ended_at = now()
         WHERE id = p_game_id;
@@ -389,6 +524,69 @@ BEGIN
     IF fails < 2 THEN RAISE EXCEPTION 'Arthur can only reveal after 2 quests have failed.'; END IF;
 
     UPDATE game_players SET revealed = true, revealed_at = now() WHERE game_id = p_game_id AND seat = p_seat;
+    PERFORM pg_notify('avalon_game_updates', p_game_id::text);
+END;
+$$ LANGUAGE plpgsql;
+
+-- A disconnected team member previously stalled a quest forever --
+-- sp_cast_mission_card only resolves once every team seat has a card, and
+-- the only escape hatch was resetting the whole game to the lobby. This
+-- gives the host an explicit one instead: auto-play a card for any team
+-- seat that's both (a) currently disconnected -- checked by the caller,
+-- not here, since connection status lives in the in-memory Room, not
+-- Postgres -- and (b) hasn't already submitted one. The auto-played card
+-- mirrors what that seat's role is actually constrained to play for real:
+-- Agravain is forced to Fail on every quest regardless of who's at the
+-- keyboard, so defaulting them to Fail is simply correct, not a guess.
+-- Every other role defaults to the charitable Success, so this can never
+-- be used to sneak in a Fail on an absent player's behalf.
+--
+-- Safe to call speculatively: if fewer cards are in than the team size even
+-- after filling in the disconnected seats (i.e. someone still-connected
+-- just hasn't played yet), it's a no-op -- the host can just try again once
+-- more of the team is actually disconnected.
+CREATE OR REPLACE FUNCTION sp_force_resolve_mission(p_game_id UUID, p_disconnected_seats INT[])
+RETURNS VOID AS $$
+DECLARE
+    g games%ROWTYPE;
+    v_seat INT;
+    v_role VARCHAR(20);
+    cards_in INT;
+    fail_count INT;
+BEGIN
+    SELECT * INTO g FROM games WHERE id = p_game_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Game not found.'; END IF;
+    IF g.phase <> 'mission' THEN RAISE EXCEPTION 'Not currently waiting on mission cards.'; END IF;
+
+    FOREACH v_seat IN ARRAY g.proposed_team LOOP
+        IF v_seat = ANY(p_disconnected_seats)
+           AND NOT EXISTS (
+               SELECT 1 FROM mission_cards mc
+               WHERE mc.game_id = p_game_id AND mc.mission_number = g.mission_number AND mc.seat = v_seat
+           ) THEN
+            SELECT role INTO v_role FROM game_players WHERE game_id = p_game_id AND seat = v_seat;
+            INSERT INTO mission_cards (game_id, mission_number, seat, success, reversed)
+            VALUES (p_game_id, g.mission_number, v_seat, v_role IS DISTINCT FROM 'AGRAVAIN', false);
+        END IF;
+    END LOOP;
+
+    SELECT COUNT(*) INTO cards_in FROM mission_cards
+        WHERE game_id = p_game_id AND mission_number = g.mission_number;
+    IF cards_in < array_length(g.proposed_team, 1) THEN
+        PERFORM pg_notify('avalon_game_updates', p_game_id::text);
+        RETURN;
+    END IF;
+
+    -- Same tail as sp_cast_mission_card from here: hand off to Excalibur if
+    -- it's in play and unspent, otherwise resolve outright.
+    IF (g.settings->>'excalibur')::boolean AND g.excalibur_holder_seat IS NOT NULL AND NOT g.excalibur_used THEN
+        UPDATE games SET phase = 'excalibur_decision' WHERE id = p_game_id;
+    ELSE
+        SELECT COUNT(*) FILTER (WHERE NOT success AND NOT reversed) INTO fail_count
+            FROM mission_cards WHERE game_id = p_game_id AND mission_number = g.mission_number;
+        PERFORM _resolve_mission(p_game_id, fail_count);
+    END IF;
+
     PERFORM pg_notify('avalon_game_updates', p_game_id::text);
 END;
 $$ LANGUAGE plpgsql;
