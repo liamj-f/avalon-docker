@@ -97,6 +97,21 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         session = await sio.get_session(sid)
         return session.get("token") if session else None
 
+    async def current_ip(sid: str) -> str:
+        session = await sio.get_session(sid)
+        return (session.get("ip") if session else None) or "unknown"
+
+    @sio.event
+    async def connect(sid: str, environ: dict[str, Any]) -> None:
+        # REMOTE_ADDR here is whatever uvicorn's ProxyHeadersMiddleware
+        # resolved it to -- the real client IP if the request came via a
+        # trusted proxy forwarding X-Forwarded-For (see nginx.conf.template
+        # and main.py's forwarded_allow_ips), otherwise the direct peer.
+        # Stashed in the session now because it's only available on this
+        # event; handlers below read it back via current_ip(sid).
+        async with sio.session(sid) as session:
+            session["ip"] = environ.get("REMOTE_ADDR") or "unknown"
+
     def with_room(handler: RoomHandler):
         async def wrapped(sid: str, data: dict[str, Any] | None = None) -> None:
             try:
@@ -122,10 +137,18 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
             room, player = room_manager.create_room(display_name)
             player.connected = True
             player.socket_id = sid
-            await sio.save_session(sid, {"token": player.token})
+            async with sio.session(sid) as session:
+                session["token"] = player.token
             await sio.enter_room(sid, _player_room(player.token))
             await sio.emit("room:joined", {"token": player.token, "code": room.code}, to=sid)
             await broadcast_room(room)
+            # Room codes are short enough (5 chars, ~39M combinations) that
+            # this is obscurity, not a security boundary -- there's nothing
+            # in-app throttling a scripted client hammering room creation or
+            # room:join with guessed codes. This line (and the failed-join
+            # one below) exists so an external tool like fail2ban can do
+            # that throttling instead, from wherever these logs end up.
+            logger.info("[socket] room:create ip=%s code=%s", await current_ip(sid), room.code)
         except Exception as err:  # noqa: BLE001
             await fail(sid, err)
 
@@ -138,10 +161,21 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
                 raise GameError("Enter a display name.")
             if not code:
                 raise GameError("Enter a room code.")
-            room, player = room_manager.join_room(code, display_name)
+            try:
+                room, player = room_manager.join_room(code, display_name)
+            except GameError:
+                # The specific case fail2ban actually cares about: repeated
+                # wrong-code guesses are indistinguishable from any other
+                # socket traffic at the nginx-access-log level, since
+                # Socket.IO multiplexes every event over the same long-lived
+                # connection/endpoint -- this is the only layer that can see
+                # "this particular attempt named a room that doesn't exist."
+                logger.warning("[socket] failed room:join ip=%s code=%s", await current_ip(sid), code)
+                raise
             player.connected = True
             player.socket_id = sid
-            await sio.save_session(sid, {"token": player.token})
+            async with sio.session(sid) as session:
+                session["token"] = player.token
             await sio.enter_room(sid, _player_room(player.token))
             await sio.emit("room:joined", {"token": player.token, "code": room.code}, to=sid)
             await broadcast_room(room)
@@ -156,9 +190,12 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
             if found is None:
                 raise GameError("That session is no longer valid.")
             room, player = found
+            if player.kicked:
+                raise GameError("You have been removed from this room by the host.")
             player.connected = True
             player.socket_id = sid
-            await sio.save_session(sid, {"token": token})
+            async with sio.session(sid) as session:
+                session["token"] = token
             await sio.enter_room(sid, _player_room(token))
             await sio.emit("room:joined", {"token": token, "code": room.code}, to=sid)
             await broadcast_room(room)
@@ -190,6 +227,16 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         room_manager.leave_room(player.token)
         await broadcast_room(room)
 
+    async def handle_kick_player(room: Room, player, data: dict[str, Any]) -> None:
+        kicked_sid = room.kick_player(player.token, int(data.get("targetSeat")))
+        await broadcast_room(room)
+        if kicked_sid:
+            # Force the live connection closed rather than waiting for it to
+            # notice on its own -- otherwise a kicked-but-still-connected
+            # player just sits there mid-game seeing stale state until they
+            # happen to refresh.
+            await sio.disconnect(kicked_sid)
+
     async def handle_propose_team(room: Room, player, data: dict[str, Any]) -> None:
         seats_raw = data.get("seats")
         seats = [int(s) for s in seats_raw] if isinstance(seats_raw, list) else []
@@ -206,6 +253,18 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         await game_db.cast_mission_vote(
             room.game_id, player.seat_index, bool(data.get("success")), bool(data.get("reverse"))
         )
+        await broadcast_room(room)
+
+    async def handle_force_resolve_mission(room: Room, player, _data: dict[str, Any]) -> None:
+        # Host-only, and the actual eligibility check (seat is on the
+        # current team, hasn't already played) happens in
+        # sp_force_resolve_mission itself -- this only needs to gather who's
+        # disconnected right now, since Postgres has no idea about socket
+        # connection state.
+        if player.token != room.host_token:
+            raise GameError("Only the host can force-resolve a stuck mission.")
+        disconnected_seats = [p.seat_index for p in room.players.values() if not p.connected]
+        await game_db.force_resolve_mission(room.game_id, disconnected_seats)
         await broadcast_room(room)
 
     async def handle_reveal_arthur(room: Room, player, _data: dict[str, Any]) -> None:
@@ -265,9 +324,11 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
     sio.on("room:start", with_room(handle_room_start))
     sio.on("room:resetToLobby", with_room(handle_reset_to_lobby))
     sio.on("room:leave", with_room(handle_room_leave))
+    sio.on("room:kickPlayer", with_room(handle_kick_player))
     sio.on("game:proposeTeam", with_room(handle_propose_team))
     sio.on("game:submitTeamVote", with_room(handle_submit_team_vote))
     sio.on("game:submitMissionVote", with_room(handle_submit_mission_vote))
+    sio.on("game:forceResolveMission", with_room(handle_force_resolve_mission))
     sio.on("game:revealArthur", with_room(handle_reveal_arthur))
     sio.on("game:excaliburView", with_room(handle_excalibur_view))
     sio.on("game:excaliburDecision", with_room(handle_excalibur_decision))

@@ -40,6 +40,12 @@ class Player:
     socket_id: str | None = None
     connected: bool = False
     is_host: bool = False
+    # Set only by Room.kick_player, and only meaningful mid-game (a lobby
+    # kick removes the Player outright, same as leaving). Checked by
+    # handle_room_rejoin so a kicked player's own tab can't silently
+    # reconnect itself via its still-stored token after the host removes
+    # them -- a plain disconnect must stay recoverable, a kick must not.
+    kicked: bool = False
 
 
 class Room:
@@ -101,6 +107,33 @@ class Room:
             player = self.players.get(token)
             if player is not None:
                 player.connected = False
+
+    def kick_player(self, token: str, target_seat: int) -> str | None:
+        """Host-only removal of another player. In the lobby this is just an
+        outright removal (same as them leaving -- the seat is free again).
+        Mid-game a seat can't be un-dealt without unraveling the whole game,
+        so this instead permanently marks them kicked (blocking any future
+        room:rejoin with their token) and returns their current socket_id,
+        if connected, so the caller can force-disconnect that live
+        connection on the spot rather than waiting for it to drop on its
+        own. Returns None when there's no live connection to kick."""
+        if token != self.host_token:
+            raise GameError("Only the host can remove a player.")
+        target = next((p for p in self.player_list if p.seat_index == target_seat), None)
+        if target is None:
+            raise GameError("That player is not in this room.")
+        if target.token == token:
+            raise GameError("You can't remove yourself -- use Leave instead.")
+
+        if self.phase == "lobby":
+            self.remove_player(target.token)
+            return None
+
+        target.kicked = True
+        target.connected = False
+        sid = target.socket_id
+        target.socket_id = None
+        return sid
 
     def is_empty(self) -> bool:
         if not self.players:

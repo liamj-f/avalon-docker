@@ -28,6 +28,11 @@
 #       proxy_pass http://avalon-ui:80;
 #       proxy_set_header Host $host;
 #       proxy_set_header X-Real-IP $remote_addr;
+#       # This app's own nginx (frontend/nginx.conf.template) forwards
+#       # X-Forwarded-For on to the backend for logging/fail2ban purposes --
+#       # set it here too, or every request will just show up as this
+#       # outer proxy's own IP instead of the real visitor's.
+#       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 #       proxy_http_version 1.1;
 #       proxy_set_header Upgrade $http_upgrade;
 #       proxy_set_header Connection "upgrade";
