@@ -20,8 +20,9 @@ def _excalibur_summary_for_mission(event: Any) -> dict[str, Any]:
     """The public half of one quest's excalibur_events row (see the query in
     load_game_state_for_seat) -- who held it, who they viewed, and whether
     they used it on them. The viewed seat is public regardless of whether it
-    was used (see 005_excalibur_view_and_assassin_rework.sql for why); the
-    target's original/new card value stays private, surfaced only to the
+    was used -- broader than the base rule's "everyone learns who it was
+    used *on*", but that's the explicit follow-up rule this app implements.
+    The target's original/new card value stays private, surfaced only to the
     holder and the target themselves, below."""
     if event is None:
         return {"excaliburHolderSeat": None, "excaliburUsed": False, "excaliburTargetSeat": None}
