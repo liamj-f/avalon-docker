@@ -5,14 +5,19 @@ import { PlayerShield } from './PlayerAvatar.jsx';
 // phase-specific avatar-grids (TeamBuilder, VotePanel, MissionPanel, ...)
 // come and go with whatever's currently happening and double as click
 // targets for game actions, so they're not a safe place to also hang a
-// standing "who's connected" view or a kick button. This is that view,
-// reusing the same shield + connection-dot presentation the lobby already
-// uses for the same seats.
-export default function PlayerRoster({ room, onKick }) {
+// standing "who's connected" view or moderation controls. This is that
+// view, reusing the same shield + connection-dot presentation the lobby
+// already uses for the same seats.
+//
+// No Kick here, deliberately -- kick_player only works in the lobby (a
+// seat can't be un-dealt from a game already in progress without
+// unraveling it), so the host's mid-game moderation tool is muting chat
+// instead.
+export default function PlayerRoster({ room, onSetMuted }) {
   const { players, you } = room;
 
-  const kick = (p) => {
-    if (window.confirm(`Remove ${p.displayName} from the game?`)) onKick(p.seat);
+  const toggleMuted = (p) => {
+    onSetMuted(p.seat, !p.muted);
   };
 
   return (
@@ -29,9 +34,15 @@ export default function PlayerRoster({ room, onKick }) {
             {p.isHost && <span className="badge">Host</span>}
             {p.seat === you?.seat && <span className="badge badge-you">You</span>}
             {!p.connected && <span className="badge badge-warn">offline</span>}
+            {p.muted && <span className="badge badge-warn">muted</span>}
             {you?.isHost && p.seat !== you.seat && (
-              <button type="button" className="btn btn-ghost btn-tiny btn-danger-tiny" onClick={() => kick(p)}>
-                Kick
+              <button
+                type="button"
+                className={`btn btn-ghost btn-tiny ${p.muted ? '' : 'btn-danger-tiny'}`}
+                onClick={() => toggleMuted(p)}
+                title={p.muted ? 'Allow them to send chat messages again' : "Stop their messages from reaching the table"}
+              >
+                {p.muted ? 'Unmute' : 'Mute'}
               </button>
             )}
           </li>

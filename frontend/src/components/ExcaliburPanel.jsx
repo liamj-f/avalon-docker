@@ -50,7 +50,13 @@ export default function ExcaliburPanel({ room, onView, onDecide }) {
       {!isHolder && (
         <div className="avatar-grid">
           {players.map((p) => (
-            <PlayerAvatar key={p.seat} player={p} isOnTeam={proposedSet.has(p.seat)} isYou={p.seat === you.seat} />
+            <PlayerAvatar
+              key={p.seat}
+              player={p}
+              isOnTeam={proposedSet.has(p.seat)}
+              isExcaliburHolder={p.seat === game.excaliburHolderSeat}
+              isYou={p.seat === you.seat}
+            />
           ))}
         </div>
       )}
