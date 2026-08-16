@@ -116,6 +116,7 @@ export default function AssassinPanel({ room, onAssassinate, onForcePass }) {
         <StuckPhaseNotice
           message="The Assassin is disconnected. You can force this through — it always resolves as a Pass (Good's win stands), the same as the Assassin choosing not to guess. There's no way to force a name on their behalf — nobody but the Assassin themselves knows who they are."
           buttonLabel="Force-resolve: pass"
+          confirmMessage="Force-pass the assassination? This immediately ends the game with Good's win — this can't be undone."
           onClick={onForcePass}
         />
       )}

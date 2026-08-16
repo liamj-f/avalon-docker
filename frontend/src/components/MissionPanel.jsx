@@ -70,6 +70,7 @@ export default function MissionPanel({ room, onPlayCard, onForceResolve }) {
         <StuckPhaseNotice
           message="Someone on this quest is disconnected and hasn't played a card. You can force it through — anyone still missing gets auto-played as Success on their behalf (or Fail, if they're Agravain)."
           buttonLabel="Force-resolve stuck quest"
+          confirmMessage="Force this quest through? Anyone still missing a card will be auto-played as Success (or Fail, if they're Agravain)."
           onClick={onForceResolve}
         />
       )}

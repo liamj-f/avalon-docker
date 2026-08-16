@@ -67,6 +67,7 @@ export default function ExcaliburPanel({ room, onView, onDecide, onForceDecline 
         <StuckPhaseNotice
           message={`${holderName} is disconnected and can't decide. You can force it through — this always resolves as declining to use Excalibur, never a forced swap of anyone's card.`}
           buttonLabel="Force-resolve: decline Excalibur"
+          confirmMessage="Force-resolve this Excalibur decision? This will resolve as declining to use it — nobody's card gets swapped."
           onClick={onForceDecline}
         />
       )}

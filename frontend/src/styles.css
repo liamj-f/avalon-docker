@@ -1555,6 +1555,18 @@ button.mission-pip:hover {
   word-wrap: break-word;
 }
 
+.chat-line-system {
+  font-style: italic;
+  color: var(--text-dim);
+  border-left: 2px solid var(--gold);
+  padding-left: 8px;
+}
+
+.chat-system-attribution {
+  font-style: normal;
+  opacity: 0.7;
+}
+
 .chat-form {
   display: flex;
   gap: 6px;
