@@ -304,12 +304,10 @@ backend/
     main.py                       # entrypoint: FastAPI + Socket.IO + uvicorn
   requirements.txt
   migrations/
-    001_schema.sql        # every table: games, game_players, game_missions, team_votes,
-                           # mission_cards, lady_of_lake_events, excalibur_events, mission_config
+    001_schema.sql        # every table: games, game_players, game_missions, team_proposals,
+                           # team_votes, mission_cards, lady_of_lake_events, excalibur_events,
+                           # mission_config
     002_procedures.sql     # the actual game engine, as PL/pgSQL stored procedures
-    003_team_proposals.sql  # one row per team proposal (leader + team), so a resolved
-                             # vote's per-seat choices can be shown back later -- see
-                             # the Team vote history feature and its design note
 frontend/
   src/
     pages/            # Home, Lobby, Game
@@ -384,9 +382,7 @@ name wins," but "commit to a shape, then match it precisely." Naming
 Gawain in the Merlin-guess mode is **not** one of Evil's winning shapes —
 Gawain is a third faction with his own win condition, entirely separate
 from Evil's, even though both start from the same 1-target guess.
-`007_gawain_own_win.sql` (correcting a real mechanical error introduced in
-`006_assassin_pass_mode.sql`, which folded a Gawain hit into Evil's win)
-implements all three modes as one `sp_submit_assassination` call,
+`sp_submit_assassination` (`002_procedures.sql`) implements all three modes as one call,
 distinguished by how many seats are named (0, 1, or 2), and now tracks a
 three-way `winner` (`good` / `evil` / `gawain`) rather than the usual two:
 
@@ -459,8 +455,7 @@ learn is private to them.
 
 Originally implemented as an invented simplification (a single Good player
 holding it for the whole game, only able to cleanse one Fail on a mission
-that already had one). `004_excalibur_rework.sql` replaces that with the
-real expansion rule:
+that already had one). The real expansion rule, as implemented today:
 
 - **Assigning**: every quest, whoever's proposing the team also designates
   one *other* player on that team (never themselves) to hold Excalibur for
@@ -471,8 +466,8 @@ real expansion rule:
   nothing carries over between proposals.
 - **Using — view first, then decide**: originally the holder saw *every*
   participant's real card at once. That's not the real rule and leaked far
-  more than intended, so `005_excalibur_view_and_assassin_rework.sql`
-  splits it into two calls: `sp_excalibur_view` lets the holder pick **one**
+  more than intended, so this is split into two calls: `sp_excalibur_view`
+  lets the holder pick **one**
   participant, revealing only that one's real card (`you.excaliburViewing`
   — the one place a card value leaves the mission_cards table
   pre-resolution, and only that single row); calling it again in the same
@@ -586,10 +581,9 @@ this build picks one clean interpretation per mode and documents it:
 `team_votes` alone was never enough to show a resolved vote back later — it
 records who voted which way, but not who was leading or who was on the
 team, and `games.proposed_team`/`leader_seat` get overwritten by the very
-next proposal the instant one resolves. `003_team_proposals.sql` adds a
-`team_proposals` table (one row per leader-proposal-attempt) specifically
-so that context survives; `game_db.py`'s `voteHistory` query then joins it
-against `team_votes`.
+next proposal the instant one resolves. `team_proposals` (one row per
+leader-proposal-attempt) exists specifically so that context survives;
+`game_db.py`'s `voteHistory` query then joins it against `team_votes`.
 
 The one attempt currently being voted on is deliberately excluded from
 `voteHistory` — real Avalon reveals a vote's individual choices the instant
@@ -598,7 +592,7 @@ still shows a live in-progress count (`votesInSoFar`/`hasVoted`) without
 leaking anyone's actual choice early; `voteHistory` only ever contains
 fully-resolved attempts.
 
-`team_proposals.excalibur_seat` (added in `004_excalibur_rework.sql`) rides
+`team_proposals.excalibur_seat` rides
 along in the same row as the team/leader/attempt, so each `voteHistory`
 entry also carries `excaliburSeat` — the proposed Excalibur holder is
 public before the vote happens, so there's nothing to hide here even for
@@ -774,7 +768,7 @@ against a real local Postgres 16 and the real backend process (not mocks):
   the two sides were different array element types (`INT[]` vs implicit
   `SMALLINT[]`) — invisible without actually exercising that code path
   end-to-end, which is exactly what this test did before it ever shipped.
-- **Gawain wins for himself, not Evil (`007_gawain_own_win.sql`)**: an
+- **Gawain wins for himself, not Evil**: an
   earlier round had `sp_submit_assassination` treat a Gawain hit as just
   another way for Evil to win (`winner = 'evil'`), which is wrong — Gawain
   is a third faction with his own win condition. Verified with a real,

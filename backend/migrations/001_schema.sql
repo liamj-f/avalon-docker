@@ -52,7 +52,11 @@ CREATE TABLE games (
     leader_seat SMALLINT,
     rejection_count SMALLINT NOT NULL DEFAULT 0,
     proposed_team SMALLINT[],
-    pending_fail_count SMALLINT,      -- set while the Excalibur holder is deciding
+    -- No longer written since Excalibur's rework (the holder now sees a
+    -- real card, not a fail count -- see sp_excalibur_view/_decision in
+    -- 002_procedures.sql) -- left in place rather than dropped, since
+    -- nothing reads it either and it's zero-risk to just leave unused.
+    pending_fail_count SMALLINT,
 
     -- Lady of the Lake (both tokens below are public — who holds them is
     -- visible at the table; only what a holder learns is private)
@@ -62,6 +66,11 @@ CREATE TABLE games (
     -- Excalibur
     excalibur_holder_seat SMALLINT,
     excalibur_used BOOLEAN NOT NULL DEFAULT false,
+    -- Set by sp_excalibur_view, cleared by sp_excalibur_decision -- tracks
+    -- which of this quest's participants the holder has committed to
+    -- looking at (they only ever get to see one card, so this also guards
+    -- against viewing a second).
+    excalibur_viewing_seat SMALLINT,
 
     -- Lancelot: solo mode's single-use Reverse card, and the paired mode's
     -- secretly-predetermined automatic swap
@@ -69,8 +78,10 @@ CREATE TABLE games (
     swap_mission_number SMALLINT,
     lancelots_swapped BOOLEAN NOT NULL DEFAULT false,
 
-    -- Assassination
-    assassination_target SMALLINT,
+    -- Assassination -- an array since the Assassin's guess is either one
+    -- seat (Merlin/Gawain) or two (the Tristan & Iseult pair), or empty
+    -- (passing on the guess entirely).
+    assassination_target SMALLINT[],
 
     -- Outcome
     started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -114,6 +125,27 @@ CREATE TABLE game_missions (
 
 CREATE INDEX idx_game_missions_game_id ON game_missions(game_id);
 
+-- One row per team proposal (leader + team, at the moment it's proposed) so
+-- a resolved vote's individual approve/reject choices can be shown back
+-- later -- team_votes alone only ever records who voted which way, never
+-- who was leading or who was on the team being voted on, and
+-- games.proposed_team/leader_seat get overwritten by the next proposal the
+-- instant one resolves. See sp_propose_team and load_game_state_for_seat's
+-- voteHistory query (backend/src/game_db.py).
+CREATE TABLE team_proposals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    game_id UUID NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+    mission_number SMALLINT NOT NULL,
+    attempt SMALLINT NOT NULL,
+    leader_seat SMALLINT NOT NULL,
+    team_seats JSONB NOT NULL,
+    excalibur_seat SMALLINT,          -- NULL unless Excalibur was assigned with this proposal
+    proposed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX team_proposals_uq ON team_proposals(game_id, mission_number, attempt);
+CREATE INDEX idx_team_proposals_game ON team_proposals(game_id);
+
 CREATE TABLE team_votes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     game_id UUID NOT NULL REFERENCES games(id) ON DELETE CASCADE,
@@ -153,13 +185,22 @@ CREATE TABLE lady_of_lake_events (
     used_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- One row per quest an Excalibur holder acted on -- whether or not they
+-- actually used it. holder/target/original_* are public once the quest
+-- resolves (everyone learns who viewed whom and whether it was used); only
+-- the target's actual card value (original_success/original_reversed)
+-- stays private to the holder and the target themselves (backend/src/
+-- game_db.py only ever surfaces that pair to those two seats' own "you"
+-- view).
 CREATE TABLE excalibur_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     game_id UUID NOT NULL REFERENCES games(id) ON DELETE CASCADE,
     mission_number SMALLINT NOT NULL,
     holder_seat SMALLINT NOT NULL,
     used BOOLEAN NOT NULL,
-    fail_count_before SMALLINT NOT NULL,
-    fail_count_after SMALLINT NOT NULL,
+    target_seat SMALLINT,
+    original_success BOOLEAN,
+    original_reversed BOOLEAN,
+    new_success BOOLEAN,              -- NULL unless used = true
     used_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
