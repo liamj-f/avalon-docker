@@ -226,6 +226,83 @@ button {
   width: 100%;
 }
 
+.how-to-play-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
+  background: transparent;
+  border: none;
+  color: var(--gold-bright);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.how-to-play {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--card-border);
+  font-size: 0.88rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.how-to-play h3 {
+  color: var(--gold-bright);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin: 16px 0 6px;
+}
+
+.how-to-play p {
+  margin: 0 0 10px;
+}
+
+.how-to-play ol {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+
+.how-to-play li {
+  margin-bottom: 6px;
+}
+
+.how-to-play li::marker {
+  color: var(--gold);
+}
+
+.how-to-play-table-wrap {
+  overflow-x: auto;
+}
+
+.how-to-play-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.how-to-play-table th,
+.how-to-play-table td {
+  padding: 5px 8px;
+  text-align: center;
+  border: 1px solid var(--card-border);
+}
+
+.how-to-play-table th {
+  color: var(--gold-bright);
+  font-weight: 600;
+  background: var(--bg-alt);
+}
+
+.how-to-play-table td:first-child {
+  font-weight: 600;
+  color: var(--text);
+}
+
 .page-title {
   font-size: 1.6rem;
   color: var(--gold-bright);
