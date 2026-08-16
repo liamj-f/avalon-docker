@@ -247,6 +247,13 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         await game_db.cast_team_vote(room.game_id, player.seat_index, bool(data.get("approve")))
         await broadcast_room(room)
 
+    async def handle_force_resolve_team_vote(room: Room, player, _data: dict[str, Any]) -> None:
+        if player.token != room.host_token:
+            raise GameError("Only the host can force-resolve a stuck vote.")
+        disconnected_seats = [p.seat_index for p in room.players.values() if not p.connected]
+        await game_db.force_resolve_team_vote(room.game_id, disconnected_seats)
+        await broadcast_room(room)
+
     async def handle_submit_mission_vote(room: Room, player, data: dict[str, Any]) -> None:
         await game_db.cast_mission_vote(
             room.game_id, player.seat_index, bool(data.get("success")), bool(data.get("reverse"))
@@ -279,8 +286,25 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         await game_db.excalibur_decision(room.game_id, player.seat_index, bool(data.get("use")), new_success)
         await broadcast_room(room)
 
+    async def handle_force_decline_excalibur(room: Room, player, _data: dict[str, Any]) -> None:
+        # No connection check needed here beyond host-gating -- unlike the
+        # mission/vote force-resolves, the frontend already knows whether
+        # the holder is disconnected (excaliburHolderSeat is public) and
+        # only shows this button then; nothing here depends on which seats
+        # are currently connected.
+        if player.token != room.host_token:
+            raise GameError("Only the host can force-resolve a stuck Excalibur decision.")
+        await game_db.force_decline_excalibur(room.game_id)
+        await broadcast_room(room)
+
     async def handle_use_lady_of_lake(room: Room, player, data: dict[str, Any]) -> None:
         await game_db.use_lady_of_lake(room.game_id, player.seat_index, int(data.get("targetSeat")))
+        await broadcast_room(room)
+
+    async def handle_force_resolve_lady_of_lake(room: Room, player, data: dict[str, Any]) -> None:
+        if player.token != room.host_token:
+            raise GameError("Only the host can force-resolve a stuck Lady of the Lake.")
+        await game_db.force_resolve_lady_of_lake(room.game_id, int(data.get("targetSeat")))
         await broadcast_room(room)
 
     async def handle_submit_assassination(room: Room, player, data: dict[str, Any]) -> None:
@@ -289,9 +313,16 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         await game_db.submit_assassination(room.game_id, player.seat_index, targets)
         await broadcast_room(room)
 
+    async def handle_force_pass_assassination(room: Room, player, _data: dict[str, Any]) -> None:
+        if player.token != room.host_token:
+            raise GameError("Only the host can force-pass a stuck assassination.")
+        await game_db.force_pass_assassination(room.game_id)
+        await broadcast_room(room)
+
     async def handle_chat_send(room: Room, player, data: dict[str, Any]) -> None:
         if player.muted:
             raise GameError("You have been muted by the host.")
+        room.check_chat_rate_limit(player.token)
         message = str(data.get("message") or "").strip()
         if not message:
             return
@@ -331,13 +362,17 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
     sio.on("room:kickPlayer", with_room(handle_kick_player))
     sio.on("game:proposeTeam", with_room(handle_propose_team))
     sio.on("game:submitTeamVote", with_room(handle_submit_team_vote))
+    sio.on("game:forceResolveTeamVote", with_room(handle_force_resolve_team_vote))
     sio.on("game:submitMissionVote", with_room(handle_submit_mission_vote))
     sio.on("game:forceResolveMission", with_room(handle_force_resolve_mission))
     sio.on("game:revealArthur", with_room(handle_reveal_arthur))
     sio.on("game:excaliburView", with_room(handle_excalibur_view))
     sio.on("game:excaliburDecision", with_room(handle_excalibur_decision))
+    sio.on("game:forceDeclineExcalibur", with_room(handle_force_decline_excalibur))
     sio.on("game:useLadyOfLake", with_room(handle_use_lady_of_lake))
+    sio.on("game:forceResolveLadyOfLake", with_room(handle_force_resolve_lady_of_lake))
     sio.on("game:submitAssassination", with_room(handle_submit_assassination))
+    sio.on("game:forcePassAssassination", with_room(handle_force_pass_assassination))
     sio.on("chat:send", with_room(handle_chat_send))
     sio.on("room:setMuted", with_room(handle_set_muted))
 

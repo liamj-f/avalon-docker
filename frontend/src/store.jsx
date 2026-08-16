@@ -100,6 +100,9 @@ function useMemoActions(dispatch) {
   const submitTeamVote = useCallback((approve) => {
     socket.emit('game:submitTeamVote', { approve });
   }, []);
+  const forceResolveTeamVote = useCallback(() => {
+    socket.emit('game:forceResolveTeamVote', {});
+  }, []);
   const submitMissionVote = useCallback((success, reverse = false) => {
     socket.emit('game:submitMissionVote', { success, reverse });
   }, []);
@@ -109,17 +112,26 @@ function useMemoActions(dispatch) {
   const submitAssassination = useCallback((targetSeats) => {
     socket.emit('game:submitAssassination', { targetSeats });
   }, []);
+  const forcePassAssassination = useCallback(() => {
+    socket.emit('game:forcePassAssassination', {});
+  }, []);
   const revealArthur = useCallback(() => {
     socket.emit('game:revealArthur', {});
   }, []);
   const useLadyOfLake = useCallback((targetSeat) => {
     socket.emit('game:useLadyOfLake', { targetSeat });
   }, []);
+  const forceResolveLadyOfLake = useCallback((targetSeat) => {
+    socket.emit('game:forceResolveLadyOfLake', { targetSeat });
+  }, []);
   const submitExcaliburView = useCallback((targetSeat) => {
     socket.emit('game:excaliburView', { targetSeat });
   }, []);
   const submitExcaliburDecision = useCallback((use, newSuccess) => {
     socket.emit('game:excaliburDecision', { use, newSuccess });
+  }, []);
+  const forceDeclineExcalibur = useCallback(() => {
+    socket.emit('game:forceDeclineExcalibur', {});
   }, []);
   const setRolePreference = useCallback((key, want) => {
     socket.emit('room:setRolePreference', { key, want });
@@ -147,13 +159,17 @@ function useMemoActions(dispatch) {
     leaveRoom,
     proposeTeam,
     submitTeamVote,
+    forceResolveTeamVote,
     submitMissionVote,
     forceResolveMission,
     submitAssassination,
+    forcePassAssassination,
     revealArthur,
     useLadyOfLake,
+    forceResolveLadyOfLake,
     submitExcaliburView,
     submitExcaliburDecision,
+    forceDeclineExcalibur,
     setRolePreference,
     transferHost,
     kickPlayer,

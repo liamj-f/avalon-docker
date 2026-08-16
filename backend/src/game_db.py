@@ -79,6 +79,35 @@ async def force_resolve_mission(game_id: UUID, disconnected_seats: list[int]) ->
     await pool.execute("SELECT sp_force_resolve_mission($1,$2)", game_id, disconnected_seats)
 
 
+async def force_resolve_team_vote(game_id: UUID, disconnected_seats: list[int]) -> None:
+    pool = await get_pool()
+    await pool.execute("SELECT sp_force_resolve_team_vote($1,$2)", game_id, disconnected_seats)
+
+
+async def force_decline_excalibur(game_id: UUID) -> None:
+    pool = await get_pool()
+    await pool.execute("SELECT sp_force_decline_excalibur($1)", game_id)
+
+
+async def force_resolve_lady_of_lake(game_id: UUID, target_seat: int) -> None:
+    pool = await get_pool()
+    await pool.execute("SELECT sp_force_resolve_lady_of_lake($1,$2)", game_id, target_seat)
+
+
+async def force_pass_assassination(game_id: UUID) -> None:
+    pool = await get_pool()
+    await pool.execute("SELECT sp_force_pass_assassination($1)", game_id)
+
+
+async def get_assassin_seat(game_id: UUID) -> int | None:
+    """The Assassin's identity is otherwise secret -- this exists only so
+    the host can be told *whether* the seat that needs to act is
+    disconnected (see rooms.py's serialize_for_token), never which seat it
+    actually is."""
+    pool = await get_pool()
+    return await pool.fetchval("SELECT seat FROM game_players WHERE game_id = $1 AND role = 'ASSASSIN'", game_id)
+
+
 async def reveal_arthur(game_id: UUID, seat: int) -> None:
     pool = await get_pool()
     await pool.execute("SELECT sp_reveal_arthur($1,$2)", game_id, seat)

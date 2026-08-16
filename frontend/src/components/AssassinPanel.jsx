@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import PlayerAvatar from './PlayerAvatar.jsx';
 
-export default function AssassinPanel({ room, onAssassinate }) {
+export default function AssassinPanel({ room, onAssassinate, onForcePass }) {
   const { game, players, you } = room;
   const isAssassin = you.roleId === 'ASSASSIN';
   const hasPairRoute = game.hasTristanIseult;
@@ -107,6 +107,19 @@ export default function AssassinPanel({ room, onAssassinate }) {
           </button>
           <button type="button" className="btn btn-ghost" onClick={() => onAssassinate([])}>
             🏳️ Pass — let Good’s win stand
+          </button>
+        </div>
+      )}
+
+      {you.isHost && !isAssassin && game.assassinDisconnected && (
+        <div className="stuck-mission-notice">
+          <p className="hint">
+            The Assassin is disconnected. You can force this through — it always resolves as a Pass (Good&rsquo;s win
+            stands), the same as the Assassin choosing not to guess. There&rsquo;s no way to force a name on their
+            behalf — nobody but the Assassin themselves knows who they are.
+          </p>
+          <button type="button" className="btn btn-ghost" onClick={onForcePass}>
+            ⚡ Force-resolve: pass
           </button>
         </div>
       )}

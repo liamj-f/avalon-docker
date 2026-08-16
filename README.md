@@ -287,6 +287,28 @@ npm install
 npm run dev   # http://localhost:5173, proxies /api and /socket.io to :4000
 ```
 
+## Running the backend tests
+
+`backend/tests/` is a pytest suite that calls the stored procedures in
+`backend/migrations/002_procedures.sql` directly — no FastAPI, no
+Socket.IO, not even the in-memory `Room` — the same way `game_db.py` does
+in production. Each test gets its own freshly created database, migrated
+by the real `db.py:run_migrations()`, so this doubles as the migration
+files' own test suite: a migration that fails to apply cleanly fails every
+test immediately, and `test_schema.py` checks the tables/procedures/seed
+data that come out the other end.
+
+```bash
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+
+# Needs a Postgres server reachable to create/drop test databases against --
+# defaults to the same user/password docker-compose.yml's bundled `db`
+# service uses locally (docker compose up db), override if yours differs.
+TEST_ADMIN_DATABASE_URL=postgresql://avalon:change_me@localhost:5432/postgres pytest -v
+```
+
 ## Project layout
 
 ```
@@ -303,6 +325,15 @@ backend/
     db.py                        # asyncpg pool + migration runner
     main.py                       # entrypoint: FastAPI + Socket.IO + uvicorn
   requirements.txt
+  requirements-dev.txt      # + pytest/pytest-asyncio, for backend/tests/
+  pytest.ini
+  tests/
+    conftest.py            # per-test throwaway database, migrated by the real db.py:run_migrations()
+    helpers.py               # start_game() etc. -- deals a game with explicit, deterministic roles
+    test_schema.py             # migrations apply cleanly; expected tables/procedures/seed data exist
+    test_game_flow.py            # team-vote/mission loop to each win condition
+    test_assassination.py          # all 3 sp_submit_assassination modes, incl. the Gawain regression
+    test_force_resolve.py            # the host "stuck phase" escape hatches (see design note below)
   migrations/
     001_schema.sql        # every table: games, game_players, game_missions, team_proposals,
                            # team_votes, mission_cards, lady_of_lake_events, excalibur_events,
@@ -706,6 +737,59 @@ at `z-index: -1` (page) or behind the modal's own content via a `position:
 relative; z-index: 1` bump on the modal's real children (`z-index: 0` for
 the art layer) — text contrast is untouched by design, this is mood, not
 a new information channel.
+
+### Design note: Host escape hatches for a disconnected player mid-phase
+
+Every phase that needs a specific seat (or seats) to act before the game
+can move on previously had no recovery if that seat dropped mid-phase —
+the only way out was the host resetting the entire game back to the lobby.
+Five stored procedures now give the host a phase-appropriate way to force
+that phase to a conclusion instead, each shaped by what's actually fair to
+assume on a missing player's behalf:
+
+- **`sp_force_resolve_mission`** (the original case this pattern started
+  from): fills a card for any disconnected team seat that hasn't played
+  one. Agravain still gets Fail — that's their real, unconditional
+  constraint, not a guess — everyone else gets the charitable Success, so
+  this can never be used to sneak in a Fail on someone's behalf.
+- **`sp_force_resolve_team_vote`**: same shape, but there's no equivalent
+  to Agravain's forced Fail for a vote — every seat, Good or Evil, is free
+  to vote either way as a matter of pure judgment. The charitable default
+  is Approve: it keeps the game moving the way a real approval would,
+  rather than risking the 5-straight-rejections auto-loss over nothing but
+  a dropped connection.
+- **`sp_force_decline_excalibur`**: resolves as "declined", exactly as if
+  the holder had chosen not to use it — never a forced swap, since there's
+  no way to know what they'd have picked and guessing wrong changes a real
+  result. Handles both sub-states a disconnected holder can be caught in
+  (never called `sp_excalibur_view`, or viewed but never decided).
+- **`sp_force_resolve_lady_of_lake`**: unlike Excalibur, there's no
+  "decline" available in the real rule — the token has to go *somewhere*.
+  This is `sp_use_lady_of_lake` with the "caller must be the current
+  holder" check dropped, so the host picks the next holder on the
+  disconnected one's behalf. The loyalty reveal itself is only ever
+  private to whoever's holding it, so this is functionally silent — nobody
+  was there to receive it either way; the point is moving the token
+  forward, not manufacturing information nobody gets.
+- **`sp_force_pass_assassination`**: always resolves as a Pass (Good's win
+  stands). This is the one phase where the host *can't* act on the
+  disconnected player's behalf at all — the Assassin's identity is secret,
+  so there's no "host picks a target" option the way Lady of the Lake has;
+  forcing a guess would mean the host guessing blind with no more
+  information than anyone else at the table.
+
+All five are host-only and safe to call speculatively — each checks its
+own phase and, where relevant, whether a seat already acted, so calling
+one when nothing's actually stuck is a no-op rather than an error. The
+frontend only ever shows the button once there's a real reason to reach
+for it: `MissionPanel`/`VotePanel` check `players[].connected` directly
+(team/vote membership is already public); `ExcaliburPanel`/
+`LadyOfLakePanel` do the same since both holders are public tokens at the
+table. The Assassin isn't — `AssassinPanel`'s button is gated on
+`game.assassinDisconnected`, a plain boolean `rooms.py` computes
+server-side (cross-referencing the secret assassin seat against live
+connection state) specifically so the *seat* itself is never sent to
+clients who aren't the Assassin.
 
 ## Verification
 
