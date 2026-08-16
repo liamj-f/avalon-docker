@@ -1,17 +1,21 @@
 import React, { useState } from 'react';
 import PlayerAvatar from './PlayerAvatar.jsx';
 
-export default function LadyOfLakePanel({ room, onUse }) {
+export default function LadyOfLakePanel({ room, onUse, onForceResolve }) {
   const { game, players, you } = room;
   const [target, setTarget] = useState(null);
   const isHolder = you.seat === game.ladyHolderSeat;
-  const holderName = players.find((p) => p.seat === game.ladyHolderSeat)?.displayName;
+  const holder = players.find((p) => p.seat === game.ladyHolderSeat);
+  const holderName = holder?.displayName;
+  const holderStuck = you.isHost && !isHolder && holder && !holder.connected;
 
   // lady_history isn't sent to the client directly, but anyone already
   // examined this game shows up as a past target in the reveals list —
   // that's only visible to the holder who examined them, so we can't fully
   // grey out ineligible seats for spectators. The holder still gets a
-  // server-side check either way.
+  // server-side check either way. Same applies to the host picking on a
+  // stuck holder's behalf below -- an invalid pick (already-held seat)
+  // just comes back as a toast, same as it would for the real holder.
   return (
     <div className="phase-panel">
       <h2 className="phase-title">🌊 The Lady of the Lake</h2>
@@ -28,7 +32,7 @@ export default function LadyOfLakePanel({ room, onUse }) {
             player={p}
             isYou={p.seat === you.seat}
             isSelected={target === p.seat}
-            selectable={isHolder && p.seat !== you.seat}
+            selectable={(isHolder || holderStuck) && p.seat !== game.ladyHolderSeat}
             onClick={() => setTarget(p.seat)}
           />
         ))}
@@ -38,6 +42,24 @@ export default function LadyOfLakePanel({ room, onUse }) {
         <button type="button" className="btn btn-primary" disabled={target === null} onClick={() => onUse(target)}>
           Examine
         </button>
+      )}
+
+      {holderStuck && (
+        <div className="stuck-mission-notice">
+          <p className="hint">
+            {holderName} is disconnected and can&rsquo;t choose. Pick who the Lady of the Lake passes to instead —
+            nobody ever sees the loyalty check itself (that was always private to {holderName} alone), this just
+            keeps the token moving.
+          </p>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={target === null}
+            onClick={() => onForceResolve(target)}
+          >
+            ⚡ Force-resolve: pass to {target !== null ? players.find((p) => p.seat === target)?.displayName : '…'}
+          </button>
+        </div>
       )}
 
       {you.ladyOfLakeReveals?.length > 0 && (

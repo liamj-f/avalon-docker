@@ -1,0 +1,48 @@
+name: Backend tests
+
+# backend/tests/ calls the stored procedures directly against Postgres (see
+# its own conftest.py docstring) -- this just needs a Postgres service
+# container to create per-test throwaway databases against, no docker
+# compose stack, no frontend build.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        working-directory: backend
+        env:
+          TEST_ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: pytest -v

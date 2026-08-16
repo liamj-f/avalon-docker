@@ -30,13 +30,17 @@ export default function Game() {
     state,
     proposeTeam,
     submitTeamVote,
+    forceResolveTeamVote,
     submitMissionVote,
     forceResolveMission,
     submitAssassination,
+    forcePassAssassination,
     revealArthur,
     useLadyOfLake,
+    forceResolveLadyOfLake,
     submitExcaliburView,
     submitExcaliburDecision,
+    forceDeclineExcalibur,
     setMuted,
   } = useGame();
   const { room } = state;
@@ -122,15 +126,26 @@ export default function Game() {
 
         <div className="card">
           {game.phase === 'team_building' && <TeamBuilder room={viewRoom} onPropose={proposeTeam} />}
-          {game.phase === 'team_voting' && <VotePanel room={viewRoom} onVote={submitTeamVote} />}
+          {game.phase === 'team_voting' && (
+            <VotePanel room={viewRoom} onVote={submitTeamVote} onForceResolve={forceResolveTeamVote} />
+          )}
           {game.phase === 'mission' && (
             <MissionPanel room={viewRoom} onPlayCard={submitMissionVote} onForceResolve={forceResolveMission} />
           )}
-          {game.phase === 'lady_of_lake' && <LadyOfLakePanel room={viewRoom} onUse={useLadyOfLake} />}
-          {game.phase === 'excalibur_decision' && (
-            <ExcaliburPanel room={viewRoom} onView={submitExcaliburView} onDecide={submitExcaliburDecision} />
+          {game.phase === 'lady_of_lake' && (
+            <LadyOfLakePanel room={viewRoom} onUse={useLadyOfLake} onForceResolve={forceResolveLadyOfLake} />
           )}
-          {game.phase === 'assassination' && <AssassinPanel room={viewRoom} onAssassinate={submitAssassination} />}
+          {game.phase === 'excalibur_decision' && (
+            <ExcaliburPanel
+              room={viewRoom}
+              onView={submitExcaliburView}
+              onDecide={submitExcaliburDecision}
+              onForceDecline={forceDeclineExcalibur}
+            />
+          )}
+          {game.phase === 'assassination' && (
+            <AssassinPanel room={viewRoom} onAssassinate={submitAssassination} onForcePass={forcePassAssassination} />
+          )}
           {game.phase === 'game_over' && <EndScreen room={viewRoom} />}
         </div>
 

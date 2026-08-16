@@ -8,10 +8,11 @@ function cardKind(card) {
   return card.success ? 'success' : 'fail';
 }
 
-export default function ExcaliburPanel({ room, onView, onDecide }) {
+export default function ExcaliburPanel({ room, onView, onDecide, onForceDecline }) {
   const { game, players, you } = room;
   const isHolder = you.seat === game.excaliburHolderSeat;
-  const holderName = players.find((p) => p.seat === game.excaliburHolderSeat)?.displayName;
+  const holder = players.find((p) => p.seat === game.excaliburHolderSeat);
+  const holderName = holder?.displayName;
   const proposedSet = new Set(game.proposedTeam);
 
   // The holder can only ever see the one card they've committed to viewing
@@ -58,6 +59,18 @@ export default function ExcaliburPanel({ room, onView, onDecide }) {
               isYou={p.seat === you.seat}
             />
           ))}
+        </div>
+      )}
+
+      {you.isHost && !isHolder && holder && !holder.connected && (
+        <div className="stuck-mission-notice">
+          <p className="hint">
+            {holderName} is disconnected and can&rsquo;t decide. You can force it through — this always resolves as
+            declining to use Excalibur, never a forced swap of anyone&rsquo;s card.
+          </p>
+          <button type="button" className="btn btn-ghost" onClick={onForceDecline}>
+            ⚡ Force-resolve: decline Excalibur
+          </button>
         </div>
       )}
 

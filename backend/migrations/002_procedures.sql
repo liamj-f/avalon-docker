@@ -105,13 +105,47 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Shared tail end of a team vote once every seat has one in: tally it,
+-- either move to the mission phase or bounce back to team-building with the
+-- next leader (or, on a 5th straight rejection, end the game for Evil
+-- outright). Split out so sp_force_resolve_team_vote can reuse it exactly --
+-- the only difference between a normal and a force-resolved round is how
+-- the missing votes got there, never how the round is scored.
+CREATE OR REPLACE FUNCTION _finish_team_vote_round(p_game_id UUID)
+RETURNS VOID AS $$
+DECLARE
+    g games%ROWTYPE;
+    approvals INT;
+    approved BOOLEAN;
+BEGIN
+    SELECT * INTO g FROM games WHERE id = p_game_id;
+
+    SELECT COUNT(*) FILTER (WHERE approve) INTO approvals FROM team_votes
+        WHERE game_id = p_game_id AND mission_number = g.mission_number AND attempt = g.rejection_count;
+    approved := approvals * 2 > array_length(g.seat_order, 1);
+
+    IF approved THEN
+        UPDATE games SET phase = 'mission' WHERE id = p_game_id;
+    ELSIF g.rejection_count + 1 >= 5 THEN
+        -- Five rejected proposals in a row: Evil wins outright, no quest is ever failed by vote alone.
+        UPDATE games SET phase = 'game_over', winner = 'evil', win_reason = 'vote_track',
+                          rejection_count = rejection_count + 1, ended_at = now(), proposed_team = NULL
+            WHERE id = p_game_id;
+    ELSE
+        UPDATE games SET phase = 'team_building',
+                          rejection_count = rejection_count + 1,
+                          leader_seat = _next_seat(g.seat_order, g.leader_seat),
+                          proposed_team = NULL
+            WHERE id = p_game_id;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION sp_cast_team_vote(p_game_id UUID, p_seat INT, p_approve BOOLEAN)
 RETURNS VOID AS $$
 DECLARE
     g games%ROWTYPE;
     votes_in INT;
-    approvals INT;
-    approved BOOLEAN;
 BEGIN
     SELECT * INTO g FROM games WHERE id = p_game_id FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'Game not found.'; END IF;
@@ -133,25 +167,52 @@ BEGIN
         RETURN;
     END IF;
 
-    SELECT COUNT(*) FILTER (WHERE approve) INTO approvals FROM team_votes
-        WHERE game_id = p_game_id AND mission_number = g.mission_number AND attempt = g.rejection_count;
-    approved := approvals * 2 > array_length(g.seat_order, 1);
+    PERFORM _finish_team_vote_round(p_game_id);
+    PERFORM pg_notify('avalon_game_updates', p_game_id::text);
+END;
+$$ LANGUAGE plpgsql;
 
-    IF approved THEN
-        UPDATE games SET phase = 'mission' WHERE id = p_game_id;
-    ELSIF g.rejection_count + 1 >= 5 THEN
-        -- Five rejected proposals in a row: Evil wins outright, no quest is ever failed by vote alone.
-        UPDATE games SET phase = 'game_over', winner = 'evil', win_reason = 'vote_track',
-                          rejection_count = rejection_count + 1, ended_at = now(), proposed_team = NULL
-            WHERE id = p_game_id;
-    ELSE
-        UPDATE games SET phase = 'team_building',
-                          rejection_count = rejection_count + 1,
-                          leader_seat = _next_seat(g.seat_order, g.leader_seat),
-                          proposed_team = NULL
-            WHERE id = p_game_id;
+-- A disconnected voter previously stalled the round forever, exactly like
+-- the mission-card case sp_force_resolve_mission exists for -- the host's
+-- escape hatch here is the same shape: auto-cast for any seat that's both
+-- currently disconnected (checked by the caller, not here) and hasn't
+-- already voted. There's no equivalent to Agravain's forced Fail for a team
+-- vote -- every seat, Good or Evil, is free to vote either way as a matter
+-- of pure judgment -- so the charitable default is Approve: it keeps the
+-- game moving forward the same way a real approval would, rather than
+-- risking the 5-straight-rejections auto-loss over nothing but a dropped
+-- connection. Safe to call speculatively, same as sp_force_resolve_mission.
+CREATE OR REPLACE FUNCTION sp_force_resolve_team_vote(p_game_id UUID, p_disconnected_seats INT[])
+RETURNS VOID AS $$
+DECLARE
+    g games%ROWTYPE;
+    v_seat INT;
+    votes_in INT;
+BEGIN
+    SELECT * INTO g FROM games WHERE id = p_game_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Game not found.'; END IF;
+    IF g.phase <> 'team_voting' THEN RAISE EXCEPTION 'Not in the voting phase.'; END IF;
+
+    FOREACH v_seat IN ARRAY g.seat_order LOOP
+        IF v_seat = ANY(p_disconnected_seats)
+           AND NOT EXISTS (
+               SELECT 1 FROM team_votes tv
+               WHERE tv.game_id = p_game_id AND tv.mission_number = g.mission_number
+                 AND tv.attempt = g.rejection_count AND tv.seat = v_seat
+           ) THEN
+            INSERT INTO team_votes (game_id, mission_number, attempt, seat, approve)
+            VALUES (p_game_id, g.mission_number, g.rejection_count, v_seat, true);
+        END IF;
+    END LOOP;
+
+    SELECT COUNT(*) INTO votes_in FROM team_votes
+        WHERE game_id = p_game_id AND mission_number = g.mission_number AND attempt = g.rejection_count;
+    IF votes_in < array_length(g.seat_order, 1) THEN
+        PERFORM pg_notify('avalon_game_updates', p_game_id::text);
+        RETURN;
     END IF;
 
+    PERFORM _finish_team_vote_round(p_game_id);
     PERFORM pg_notify('avalon_game_updates', p_game_id::text);
 END;
 $$ LANGUAGE plpgsql;
@@ -308,6 +369,50 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Excalibur's holder is the one single-actor phase that can be stuck in two
+-- different sub-states -- disconnected before ever calling sp_excalibur_view
+-- (excalibur_viewing_seat still NULL), or disconnected after viewing but
+-- before deciding (a seat's real card already looked at, decision pending).
+-- Either way the host's escape hatch is the same: resolve it as "declined",
+-- exactly as if the holder had chosen not to use it -- never a forced swap,
+-- since there's no way to know what they'd have picked and guessing wrong
+-- would change a real result. If nothing was ever viewed, target_seat is
+-- recorded NULL, distinct from "viewed but declined" -- the holder never
+-- got far enough to learn anything.
+CREATE OR REPLACE FUNCTION sp_force_decline_excalibur(p_game_id UUID)
+RETURNS VOID AS $$
+DECLARE
+    g games%ROWTYPE;
+    target_card mission_cards%ROWTYPE;
+    fail_count INT;
+BEGIN
+    SELECT * INTO g FROM games WHERE id = p_game_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Game not found.'; END IF;
+    IF g.phase <> 'excalibur_decision' THEN RAISE EXCEPTION 'Not in the Excalibur decision phase.'; END IF;
+
+    IF g.excalibur_viewing_seat IS NOT NULL THEN
+        SELECT * INTO target_card FROM mission_cards
+            WHERE game_id = p_game_id AND mission_number = g.mission_number AND seat = g.excalibur_viewing_seat;
+        INSERT INTO excalibur_events (
+            game_id, mission_number, holder_seat, used, target_seat, original_success, original_reversed
+        ) VALUES (
+            p_game_id, g.mission_number, g.excalibur_holder_seat, false, g.excalibur_viewing_seat,
+            target_card.success, target_card.reversed
+        );
+    ELSE
+        INSERT INTO excalibur_events (game_id, mission_number, holder_seat, used)
+        VALUES (p_game_id, g.mission_number, g.excalibur_holder_seat, false);
+    END IF;
+
+    UPDATE games SET excalibur_holder_seat = NULL, excalibur_viewing_seat = NULL WHERE id = p_game_id;
+
+    SELECT COUNT(*) FILTER (WHERE NOT success AND NOT reversed) INTO fail_count
+        FROM mission_cards WHERE game_id = p_game_id AND mission_number = g.mission_number;
+    PERFORM _resolve_mission(p_game_id, fail_count);
+    PERFORM pg_notify('avalon_game_updates', p_game_id::text);
+END;
+$$ LANGUAGE plpgsql;
+
 -- Shared tail end of a mission: record the result (after any Lancelot
 -- Reverse flip), apply the paired Lancelots' scheduled swap if this is the
 -- mission it lands on, check both win conditions, and figure out the next
@@ -418,6 +523,45 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- The stuck-holder escape hatch, unlike sp_force_decline_excalibur, still
+-- needs a target -- the Lady of the Lake token has to go *somewhere*, there
+-- is no "decline" available in the real rule. So this is sp_use_lady_of_lake
+-- with the "p_seat must be the current holder" check dropped (the host is
+-- acting on the disconnected holder's behalf) and the target still chosen
+-- explicitly by the host, same validation otherwise (can't return to anyone
+-- who's already held it). The reveal itself is only ever private to
+-- whoever's holding it at the time -- since that's exactly the disconnected
+-- seat here, this is functionally silent (nobody is ever shown a reveal
+-- from a check nobody was present to receive), which is fine: the point is
+-- moving the token forward, not manufacturing information nobody gets.
+CREATE OR REPLACE FUNCTION sp_force_resolve_lady_of_lake(p_game_id UUID, p_target_seat INT)
+RETURNS VOID AS $$
+DECLARE
+    g games%ROWTYPE;
+    target_team VARCHAR(10);
+BEGIN
+    SELECT * INTO g FROM games WHERE id = p_game_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Game not found.'; END IF;
+    IF g.phase <> 'lady_of_lake' THEN RAISE EXCEPTION 'Not in the Lady of the Lake phase.'; END IF;
+    IF p_target_seat = g.lady_holder_seat OR p_target_seat = ANY(g.lady_history) THEN
+        RAISE EXCEPTION 'Choose someone who has not already held the Lady of the Lake.';
+    END IF;
+    IF p_target_seat <> ALL(g.seat_order) THEN RAISE EXCEPTION 'Invalid target.'; END IF;
+
+    SELECT team INTO target_team FROM game_players WHERE game_id = p_game_id AND seat = p_target_seat;
+
+    INSERT INTO lady_of_lake_events (game_id, mission_number, holder_seat, target_seat, revealed_team)
+    VALUES (p_game_id, g.mission_number, g.lady_holder_seat, p_target_seat, target_team);
+
+    UPDATE games SET phase = 'team_building',
+                      lady_holder_seat = p_target_seat,
+                      lady_history = array_append(g.lady_history, g.lady_holder_seat)
+        WHERE id = p_game_id;
+
+    PERFORM pg_notify('avalon_game_updates', p_game_id::text);
+END;
+$$ LANGUAGE plpgsql;
+
 -- The Assassin picks exactly one of three modes:
 --   1. Guess Merlin: name 1 seat. Correct if it's Merlin -> Evil wins.
 --      Naming Gawain instead (only ever a valid guess in this mode, never
@@ -494,6 +638,38 @@ BEGIN
     UPDATE games SET phase = 'game_over',
                       assassination_target = p_target_seats,
                       winner = result_winner,
+                      win_reason = 'assassination',
+                      ended_at = now()
+        WHERE id = p_game_id;
+
+    PERFORM pg_notify('avalon_game_updates', p_game_id::text);
+END;
+$$ LANGUAGE plpgsql;
+
+-- The Assassin's identity is secret -- unlike the Excalibur holder or the
+-- Lady of the Lake holder, both public tokens at the table, nobody but the
+-- Assassin themselves (and whatever info their own role grants) knows who
+-- they are. So there's no "host picks a target on their behalf" option the
+-- way sp_force_resolve_lady_of_lake has -- the host can't see who to ask,
+-- and letting the host guess *and* name a target here would hand them the
+-- Assassin's own decision (and would still be guessing blind, since the
+-- host has no more information than anyone else). This always resolves as
+-- a Pass instead: forfeits the guess, Good's win stands -- exactly the
+-- outcome a real Assassin choosing to pass produces, just triggered by the
+-- host instead of the (disconnected) Assassin. Never touches was_assassinated
+-- (nobody was named) and can never hand Evil a win it didn't earn.
+CREATE OR REPLACE FUNCTION sp_force_pass_assassination(p_game_id UUID)
+RETURNS VOID AS $$
+DECLARE
+    g games%ROWTYPE;
+BEGIN
+    SELECT * INTO g FROM games WHERE id = p_game_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Game not found.'; END IF;
+    IF g.phase <> 'assassination' THEN RAISE EXCEPTION 'Not in the assassination phase.'; END IF;
+
+    UPDATE games SET phase = 'game_over',
+                      assassination_target = '{}',
+                      winner = 'good',
                       win_reason = 'assassination',
                       ended_at = now()
         WHERE id = p_game_id;
