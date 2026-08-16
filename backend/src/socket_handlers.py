@@ -31,6 +31,23 @@ def _player_room(token: str) -> str:
     return f"player:{token}"
 
 
+def _client_ip(environ: dict[str, Any]) -> str:
+    """The real client IP for a Socket.IO connect, for logging/fail2ban.
+
+    NOT environ["REMOTE_ADDR"] -- engineio's own ASGI environ translation
+    (engineio/async_drivers/asgi.py:translate_request) hardcodes that to
+    the literal string "127.0.0.1" and never once reads scope["client"],
+    so it's always wrong here regardless of what actually connected.
+    uvicorn's ProxyHeadersMiddleware (see main.py's forwarded_allow_ips)
+    still does its job correctly -- it just does it by rewriting the ASGI
+    scope, which engineio ignores for REMOTE_ADDR but does stash verbatim
+    at environ["asgi.scope"]. Read the real, already-proxy-resolved client
+    from there instead.
+    """
+    client = (environ.get("asgi.scope") or {}).get("client")
+    return (client[0] if client else None) or "unknown"
+
+
 def _error_message(err: Exception) -> str:
     if isinstance(err, GameError):
         return str(err)
@@ -103,14 +120,10 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
 
     @sio.event
     async def connect(sid: str, environ: dict[str, Any]) -> None:
-        # REMOTE_ADDR here is whatever uvicorn's ProxyHeadersMiddleware
-        # resolved it to -- the real client IP if the request came via a
-        # trusted proxy forwarding X-Forwarded-For (see nginx.conf.template
-        # and main.py's forwarded_allow_ips), otherwise the direct peer.
-        # Stashed in the session now because it's only available on this
-        # event; handlers below read it back via current_ip(sid).
+        # Stashed in the session now because environ is only available on
+        # this event; handlers below read it back via current_ip(sid).
         async with sio.session(sid) as session:
-            session["ip"] = environ.get("REMOTE_ADDR") or "unknown"
+            session["ip"] = _client_ip(environ)
 
     def with_room(handler: RoomHandler):
         async def wrapped(sid: str, data: dict[str, Any] | None = None) -> None:
