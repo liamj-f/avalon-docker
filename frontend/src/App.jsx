@@ -6,6 +6,7 @@ import Game from './pages/Game.jsx';
 import RoleCard from './components/RoleCard.jsx';
 import QuestThemeArt from './components/QuestThemeArt.jsx';
 import PwaUpdatePrompt from './PwaUpdatePrompt.jsx';
+import ThemeToggle from './ThemeToggle.jsx';
 import { ROLE_TOGGLES, EXTENSION_TOGGLES, QUEST_FLAVOR } from './gameData.js';
 
 const FULL_ROSTER = [...ROLE_TOGGLES, ...EXTENSION_TOGGLES];
@@ -82,6 +83,7 @@ export default function App() {
           <div className={`conn-pill ${connected ? 'conn-ok' : 'conn-bad'}`}>
             {connected ? 'Connected' : 'Connecting…'}
           </div>
+          <ThemeToggle />
         </div>
       </header>
 

@@ -1,8 +1,9 @@
-/* Dark (the app's designed default look, and what everyone gets whose OS
-   either has no preference or explicitly prefers dark) lives unconditionally
-   on bare :root so it's never at the mercy of a media query. Light is purely
-   additive: anyone whose OS says prefers-color-scheme: light gets the
-   parchment palette below instead, nobody else's experience changes. */
+/* Dark (the app's designed default look) lives unconditionally on bare
+   :root. Light applies either from the OS (prefers-color-scheme, guarded
+   so an explicit data-theme="dark" can still override it) or from the
+   in-app ThemeToggle (sets data-theme="light"/"dark" on <html> and
+   remembers it per-browser in localStorage -- see ThemeToggle.jsx). The
+   explicit toggle always wins over the OS preference either way. */
 :root {
   --bg: #0f1420;
   --bg-glow: #1b2440;
@@ -30,7 +31,7 @@
 }
 
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme='dark']) {
     --bg: #f4ecd8;
     --bg-glow: #fffdf6;
     --bg-alt: #ece0c4;
@@ -49,6 +50,30 @@
     --good-text: #1c3f78;
     --evil-text: #7a2420;
   }
+}
+
+/* Explicit choice via ThemeToggle always wins over the OS, in both
+   directions -- this is what makes data-theme="light" work even when the
+   OS itself says dark (the case the media query above can't cover, since
+   it's gated on prefers-color-scheme: light). */
+:root[data-theme='light'] {
+  --bg: #f4ecd8;
+  --bg-glow: #fffdf6;
+  --bg-alt: #ece0c4;
+  --card: #fbf6ea;
+  --card-border: #cbb98a;
+  --gold: #96731d;
+  --gold-bright: #7a5c14;
+  --text: #2b2213;
+  --text-dim: #6b5d42;
+  --good: #2f5fa8;
+  --good-bg: rgba(47, 95, 168, 0.12);
+  --evil: #a3372f;
+  --evil-bg: rgba(163, 55, 47, 0.12);
+  --success: #2f7d4f;
+  --danger: #a3372f;
+  --good-text: #1c3f78;
+  --evil-text: #7a2420;
 }
 
 * {
@@ -136,6 +161,41 @@ button {
   padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--card-border);
+}
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0;
+}
+
+.theme-toggle-track {
+  position: relative;
+  width: 32px;
+  height: 17px;
+  border-radius: 999px;
+  background: var(--card-border);
+  transition: background 0.15s ease;
+}
+
+.theme-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--gold);
+  transition: transform 0.15s ease;
+}
+
+.theme-toggle[aria-checked='true'] .theme-toggle-knob {
+  transform: translateX(15px);
 }
 
 .conn-ok {
