@@ -23,11 +23,22 @@ export default function Chat({ chat, muted }) {
       <h3 className="section-title">Table Talk</h3>
       <div className="chat-list" ref={listRef}>
         {chat.length === 0 && <p className="hint">No messages yet.</p>}
-        {chat.map((m, i) => (
-          <div key={i} className="chat-line">
-            <strong>{m.displayName}:</strong> {m.message}
-          </div>
-        ))}
+        {chat.map((m, i) =>
+          m.system ? (
+            // Force-resolve transparency notices: server-generated, not typed
+            // by displayName, so they're rendered as a distinct system line
+            // rather than a chat bubble attributed to them -- see rooms.py's
+            // add_chat_message(system=True) and the socket_handlers.py
+            // force-resolve handlers that call it.
+            <div key={i} className="chat-line chat-line-system">
+              {m.message} <span className="chat-system-attribution">— {m.displayName}, host</span>
+            </div>
+          ) : (
+            <div key={i} className="chat-line">
+              <strong>{m.displayName}:</strong> {m.message}
+            </div>
+          ),
+        )}
       </div>
       {muted ? (
         <p className="hint">🔇 The host has muted you — you can still read the table, but not send messages.</p>

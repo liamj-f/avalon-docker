@@ -49,6 +49,9 @@ export default function LadyOfLakePanel({ room, onUse, onForceResolve }) {
         <StuckPhaseNotice
           message={`${holderName} is disconnected and can't choose. Pick who the Lady of the Lake passes to instead — nobody ever sees the loyalty check itself (that was always private to ${holderName} alone), this just keeps the token moving.`}
           buttonLabel={`Force-resolve: pass to ${target !== null ? players.find((p) => p.seat === target)?.displayName : '…'}`}
+          confirmMessage={`Pass the Lady of the Lake to ${
+            target !== null ? players.find((p) => p.seat === target)?.displayName : 'this player'
+          }? This can't be undone.`}
           onClick={() => onForceResolve(target)}
           disabled={target === null}
         />

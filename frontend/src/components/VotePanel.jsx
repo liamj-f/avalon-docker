@@ -56,6 +56,7 @@ export default function VotePanel({ room, onVote, onForceResolve }) {
         <StuckPhaseNotice
           message="Someone at the table is disconnected and may not have voted yet. You can force it through — anyone still missing gets counted as an Approve on their behalf."
           buttonLabel="Force-resolve stuck vote"
+          confirmMessage="Force this vote through? Anyone still missing a vote will be counted as Approve."
           onClick={onForceResolve}
         />
       )}

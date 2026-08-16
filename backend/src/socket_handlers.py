@@ -252,6 +252,11 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
             raise GameError("Only the host can force-resolve a stuck vote.")
         disconnected_seats = [p.seat_index for p in room.players.values() if not p.connected]
         await game_db.force_resolve_team_vote(room.game_id, disconnected_seats)
+        room.add_chat_message(
+            player.display_name,
+            "⚡ Force-resolved the stuck vote — anyone still missing a vote was counted as Approve.",
+            system=True,
+        )
         await broadcast_room(room)
 
     async def handle_submit_mission_vote(room: Room, player, data: dict[str, Any]) -> None:
@@ -270,6 +275,12 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
             raise GameError("Only the host can force-resolve a stuck mission.")
         disconnected_seats = [p.seat_index for p in room.players.values() if not p.connected]
         await game_db.force_resolve_mission(room.game_id, disconnected_seats)
+        room.add_chat_message(
+            player.display_name,
+            "⚡ Force-resolved the stuck quest — anyone still missing a card was auto-played as Success"
+            " (or Fail, if they're Agravain).",
+            system=True,
+        )
         await broadcast_room(room)
 
     async def handle_reveal_arthur(room: Room, player, _data: dict[str, Any]) -> None:
@@ -295,6 +306,11 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         if player.token != room.host_token:
             raise GameError("Only the host can force-resolve a stuck Excalibur decision.")
         await game_db.force_decline_excalibur(room.game_id)
+        room.add_chat_message(
+            player.display_name,
+            "⚡ Force-resolved Excalibur — declined on the holder's behalf, nobody's card was swapped.",
+            system=True,
+        )
         await broadcast_room(room)
 
     async def handle_use_lady_of_lake(room: Room, player, data: dict[str, Any]) -> None:
@@ -304,7 +320,15 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
     async def handle_force_resolve_lady_of_lake(room: Room, player, data: dict[str, Any]) -> None:
         if player.token != room.host_token:
             raise GameError("Only the host can force-resolve a stuck Lady of the Lake.")
-        await game_db.force_resolve_lady_of_lake(room.game_id, int(data.get("targetSeat")))
+        target_seat = int(data.get("targetSeat"))
+        await game_db.force_resolve_lady_of_lake(room.game_id, target_seat)
+        target = next((p for p in room.players.values() if p.seat_index == target_seat), None)
+        target_name = target.display_name if target else f"seat {target_seat}"
+        room.add_chat_message(
+            player.display_name,
+            f"⚡ Force-resolved the Lady of the Lake — passed it to {target_name} on the holder's behalf.",
+            system=True,
+        )
         await broadcast_room(room)
 
     async def handle_submit_assassination(room: Room, player, data: dict[str, Any]) -> None:
@@ -317,6 +341,11 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         if player.token != room.host_token:
             raise GameError("Only the host can force-pass a stuck assassination.")
         await game_db.force_pass_assassination(room.game_id)
+        room.add_chat_message(
+            player.display_name,
+            "⚡ Force-resolved the assassination as a Pass — Good's win stands.",
+            system=True,
+        )
         await broadcast_room(room)
 
     async def handle_chat_send(room: Room, player, data: dict[str, Any]) -> None:
@@ -341,13 +370,13 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         found = room_manager.find_by_token(token)
         if found is None:
             return
-        room, player = found
-        player.connected = False
-        player.socket_id = None
+        room, _player = found
         if room.phase == "lobby":
             # In the lobby, a disconnect is treated as leaving outright so
             # seats don't pile up with ghosts before a game has even started.
             room_manager.leave_room(token)
+        else:
+            room.mark_disconnected(token)
         await broadcast_room(room)
 
     sio.on("room:create", handle_room_create)
