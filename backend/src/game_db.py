@@ -73,6 +73,11 @@ async def cast_mission_vote(game_id: UUID, seat: int, success: bool, reverse: bo
     await pool.execute("SELECT sp_cast_mission_card($1,$2,$3,$4)", game_id, seat, success, reverse)
 
 
+async def force_resolve_mission(game_id: UUID, disconnected_seats: list[int]) -> None:
+    pool = await get_pool()
+    await pool.execute("SELECT sp_force_resolve_mission($1,$2)", game_id, disconnected_seats)
+
+
 async def reveal_arthur(game_id: UUID, seat: int) -> None:
     pool = await get_pool()
     await pool.execute("SELECT sp_reveal_arthur($1,$2)", game_id, seat)
