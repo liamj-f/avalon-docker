@@ -130,6 +130,9 @@ function useMemoActions(dispatch) {
   const kickPlayer = useCallback((targetSeat) => {
     socket.emit('room:kickPlayer', { targetSeat });
   }, []);
+  const setMuted = useCallback((targetSeat, muted) => {
+    socket.emit('room:setMuted', { targetSeat, muted });
+  }, []);
   const sendChat = useCallback((message) => {
     socket.emit('chat:send', { message });
   }, []);
@@ -154,6 +157,7 @@ function useMemoActions(dispatch) {
     setRolePreference,
     transferHost,
     kickPlayer,
+    setMuted,
     sendChat,
     clearError,
   };

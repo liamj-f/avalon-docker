@@ -19,7 +19,14 @@ export default function VotePanel({ room, onVote }) {
 
       <div className="avatar-grid">
         {players.map((p) => (
-          <PlayerAvatar key={p.seat} player={p} isLeader={p.seat === game.leaderSeat} isOnTeam={proposedSet.has(p.seat)} isYou={p.seat === you.seat} />
+          <PlayerAvatar
+            key={p.seat}
+            player={p}
+            isLeader={p.seat === game.leaderSeat}
+            isOnTeam={proposedSet.has(p.seat)}
+            isExcaliburHolder={!!excaliburHolder && p.seat === excaliburHolder.seat}
+            isYou={p.seat === you.seat}
+          />
         ))}
       </div>
 

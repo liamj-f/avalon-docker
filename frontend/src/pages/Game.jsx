@@ -37,7 +37,7 @@ export default function Game() {
     useLadyOfLake,
     submitExcaliburView,
     submitExcaliburDecision,
-    kickPlayer,
+    setMuted,
   } = useGame();
   const { room } = state;
   const { game } = room;
@@ -86,6 +86,11 @@ export default function Game() {
             </span>
           </div>
           <MissionTrack game={game} onSelectQuest={setOpenQuestNumber} />
+          <div className="avatar-legend">
+            <span className="avatar-legend-item">👑 Leader</span>
+            <span className="avatar-legend-item">🧭 Nominated for this quest</span>
+            {game.hasExcalibur && <span className="avatar-legend-item">⚔️ Holds Excalibur</span>}
+          </div>
           {(ladyHolder || excaliburHolder) && (
             <div className="extension-strip">
               {ladyHolder && (
@@ -133,8 +138,8 @@ export default function Game() {
       </div>
 
       <div className="game-sidebar">
-        <PlayerRoster room={viewRoom} onKick={kickPlayer} />
-        <Chat chat={room.chat} />
+        <PlayerRoster room={viewRoom} onSetMuted={setMuted} />
+        <Chat chat={room.chat} muted={you.muted} />
       </div>
     </div>
   );

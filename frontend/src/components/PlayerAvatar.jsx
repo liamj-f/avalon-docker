@@ -42,7 +42,18 @@ export function PlayerShield({ seat, size = 36, dim }) {
   );
 }
 
-export default function PlayerAvatar({ player, isLeader, isOnTeam, isSelected, isYou, knownLabel, revealTeam, onClick, selectable }) {
+export default function PlayerAvatar({
+  player,
+  isLeader,
+  isOnTeam,
+  isExcaliburHolder,
+  isSelected,
+  isYou,
+  knownLabel,
+  revealTeam,
+  onClick,
+  selectable,
+}) {
   const classes = ['avatar-chip'];
   if (isLeader) classes.push('avatar-leader');
   if (isOnTeam) classes.push('avatar-on-team');
@@ -52,9 +63,23 @@ export default function PlayerAvatar({ player, isLeader, isOnTeam, isSelected, i
   if (selectable) classes.push('avatar-selectable');
   if (revealTeam) classes.push(`avatar-team-${revealTeam}`);
 
+  // Excalibur takes priority over the plain nomination badge when a seat is
+  // both (the holder is always someone the leader put on the team) -- it's
+  // the more specific, more consequential fact about that seat this quest.
+  const topBadge = isExcaliburHolder
+    ? { icon: '⚔️', label: 'Holds Excalibur this quest' }
+    : isOnTeam
+      ? { icon: '🧭', label: 'Nominated for this quest' }
+      : null;
+
   return (
     <button type="button" className={classes.join(' ')} onClick={onClick} disabled={!selectable}>
       {isLeader && <span className="avatar-crown" title="Leader">👑</span>}
+      {topBadge && (
+        <span className="avatar-badge-topright" title={topBadge.label}>
+          {topBadge.icon}
+        </span>
+      )}
       <span className="avatar-circle" aria-hidden="true">
         <PlayerShield seat={player.seat} />
       </span>

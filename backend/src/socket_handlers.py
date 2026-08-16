@@ -190,8 +190,6 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
             if found is None:
                 raise GameError("That session is no longer valid.")
             room, player = found
-            if player.kicked:
-                raise GameError("You have been removed from this room by the host.")
             player.connected = True
             player.socket_id = sid
             async with sio.session(sid) as session:
@@ -233,8 +231,8 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         if kicked_sid:
             # Force the live connection closed rather than waiting for it to
             # notice on its own -- otherwise a kicked-but-still-connected
-            # player just sits there mid-game seeing stale state until they
-            # happen to refresh.
+            # player just sits in a lobby that no longer includes them until
+            # they happen to take some action.
             await sio.disconnect(kicked_sid)
 
     async def handle_propose_team(room: Room, player, data: dict[str, Any]) -> None:
@@ -292,10 +290,16 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         await broadcast_room(room)
 
     async def handle_chat_send(room: Room, player, data: dict[str, Any]) -> None:
+        if player.muted:
+            raise GameError("You have been muted by the host.")
         message = str(data.get("message") or "").strip()
         if not message:
             return
         room.add_chat_message(player.display_name, message)
+        await broadcast_room(room)
+
+    async def handle_set_muted(room: Room, player, data: dict[str, Any]) -> None:
+        room.set_muted(player.token, int(data.get("targetSeat")), bool(data.get("muted")))
         await broadcast_room(room)
 
     @sio.event
@@ -335,5 +339,6 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
     sio.on("game:useLadyOfLake", with_room(handle_use_lady_of_lake))
     sio.on("game:submitAssassination", with_room(handle_submit_assassination))
     sio.on("chat:send", with_room(handle_chat_send))
+    sio.on("room:setMuted", with_room(handle_set_muted))
 
     return sio, broadcast_room
