@@ -1,5 +1,6 @@
 import React from 'react';
 import PlayerAvatar from './PlayerAvatar.jsx';
+import StuckPhaseNotice from './StuckPhaseNotice.jsx';
 
 export default function MissionPanel({ room, onPlayCard, onForceResolve }) {
   const { game, players, you } = room;
@@ -66,15 +67,11 @@ export default function MissionPanel({ room, onPlayCard, onForceResolve }) {
       )}
 
       {you.isHost && hasStuckTeammate && (
-        <div className="stuck-mission-notice">
-          <p className="hint">
-            Someone on this quest is disconnected and hasn&rsquo;t played a card. You can force it through — anyone
-            still missing gets auto-played as Success on their behalf (or Fail, if they&rsquo;re Agravain).
-          </p>
-          <button type="button" className="btn btn-ghost" onClick={onForceResolve}>
-            ⚡ Force-resolve stuck quest
-          </button>
-        </div>
+        <StuckPhaseNotice
+          message="Someone on this quest is disconnected and hasn't played a card. You can force it through — anyone still missing gets auto-played as Success on their behalf (or Fail, if they're Agravain)."
+          buttonLabel="Force-resolve stuck quest"
+          onClick={onForceResolve}
+        />
       )}
     </div>
   );

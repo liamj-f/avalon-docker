@@ -1,5 +1,6 @@
 import React from 'react';
 import PlayerAvatar from './PlayerAvatar.jsx';
+import StuckPhaseNotice from './StuckPhaseNotice.jsx';
 
 export default function VotePanel({ room, onVote, onForceResolve }) {
   const { game, players, you } = room;
@@ -52,15 +53,11 @@ export default function VotePanel({ room, onVote, onForceResolve }) {
       )}
 
       {you.isHost && hasDisconnectedPlayer && (
-        <div className="stuck-mission-notice">
-          <p className="hint">
-            Someone at the table is disconnected and may not have voted yet. You can force it through — anyone still
-            missing gets counted as an Approve on their behalf.
-          </p>
-          <button type="button" className="btn btn-ghost" onClick={onForceResolve}>
-            ⚡ Force-resolve stuck vote
-          </button>
-        </div>
+        <StuckPhaseNotice
+          message="Someone at the table is disconnected and may not have voted yet. You can force it through — anyone still missing gets counted as an Approve on their behalf."
+          buttonLabel="Force-resolve stuck vote"
+          onClick={onForceResolve}
+        />
       )}
     </div>
   );

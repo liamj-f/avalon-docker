@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import PlayerAvatar from './PlayerAvatar.jsx';
+import StuckPhaseNotice from './StuckPhaseNotice.jsx';
 
 export default function LadyOfLakePanel({ room, onUse, onForceResolve }) {
   const { game, players, you } = room;
@@ -45,21 +46,12 @@ export default function LadyOfLakePanel({ room, onUse, onForceResolve }) {
       )}
 
       {holderStuck && (
-        <div className="stuck-mission-notice">
-          <p className="hint">
-            {holderName} is disconnected and can&rsquo;t choose. Pick who the Lady of the Lake passes to instead —
-            nobody ever sees the loyalty check itself (that was always private to {holderName} alone), this just
-            keeps the token moving.
-          </p>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            disabled={target === null}
-            onClick={() => onForceResolve(target)}
-          >
-            ⚡ Force-resolve: pass to {target !== null ? players.find((p) => p.seat === target)?.displayName : '…'}
-          </button>
-        </div>
+        <StuckPhaseNotice
+          message={`${holderName} is disconnected and can't choose. Pick who the Lady of the Lake passes to instead — nobody ever sees the loyalty check itself (that was always private to ${holderName} alone), this just keeps the token moving.`}
+          buttonLabel={`Force-resolve: pass to ${target !== null ? players.find((p) => p.seat === target)?.displayName : '…'}`}
+          onClick={() => onForceResolve(target)}
+          disabled={target === null}
+        />
       )}
 
       {you.ladyOfLakeReveals?.length > 0 && (
