@@ -22,6 +22,12 @@ from game.roles import GameError, assign_roles, compute_knowledge, default_setti
 from room_code import generate_unique_code
 
 MAX_CHAT_HISTORY = 200
+# chat:send only ever capped message *length* (500 chars, client-side) --
+# nothing stopped a scripted client from sending as fast as the socket would
+# take them. 5 messages per 10 seconds is generous for an actual human
+# typing at the table, but blocks a flood outright.
+CHAT_RATE_WINDOW_SECONDS = 10.0
+CHAT_RATE_MAX_MESSAGES = 5
 
 # Every settings key a player can cast a lobby preference vote on. The vote
 # is purely advisory -- see Room.serialize_for_token -- the host's own
@@ -66,6 +72,7 @@ class Room:
         self.chat: list[dict[str, Any]] = []
         self.host_token: str | None = None
         self.created_at = time.time()
+        self._chat_send_times: dict[str, list[float]] = {}  # token -> recent chat:send timestamps
 
     @property
     def player_list(self) -> list[Player]:
@@ -259,6 +266,20 @@ class Room:
         self.game_id = None
         return finished_game_id
 
+    def check_chat_rate_limit(self, token: str) -> None:
+        """Raises if this player has already sent CHAT_RATE_MAX_MESSAGES
+        within the last CHAT_RATE_WINDOW_SECONDS. Call before add_chat_message
+        -- this only tracks attempts, not successes, so it also throttles a
+        client hammering chat:send with blank/whitespace-only messages that
+        add_chat_message would otherwise silently no-op on."""
+        now = time.time()
+        cutoff = now - CHAT_RATE_WINDOW_SECONDS
+        recent = [t for t in self._chat_send_times.get(token, []) if t > cutoff]
+        if len(recent) >= CHAT_RATE_MAX_MESSAGES:
+            raise GameError("You're sending messages too fast — slow down a little.")
+        recent.append(now)
+        self._chat_send_times[token] = recent
+
     def add_chat_message(self, display_name: str, message: str) -> dict[str, Any]:
         entry = {
             "displayName": display_name,
@@ -285,6 +306,16 @@ class Room:
         game_state = None
         if self.phase == "in_game" and self.game_id is not None:
             game_state = await game_db.load_game_state_for_seat(self.game_id, seat)
+            if game_state is not None and game_state.get("phase") == "assassination":
+                # The Assassin's identity is secret -- unlike the Excalibur
+                # or Lady of the Lake holder (both public tokens, so the
+                # frontend can already check their connection status
+                # itself), so this is computed here instead of just sending
+                # the seat: a plain boolean can't leak who it is, only
+                # whether the host's force-pass affordance should show.
+                assassin_seat = await game_db.get_assassin_seat(self.game_id)
+                assassin = next((p for p in self.player_list if p.seat_index == assassin_seat), None)
+                game_state["assassinDisconnected"] = bool(assassin and not assassin.connected)
 
         # Hiding is a lobby-only display preference (see hide_role_selections
         # above) -- once a game has actually started, the character roster

@@ -1,11 +1,17 @@
 import React from 'react';
 import PlayerAvatar from './PlayerAvatar.jsx';
 
-export default function VotePanel({ room, onVote }) {
+export default function VotePanel({ room, onVote, onForceResolve }) {
   const { game, players, you } = room;
   const proposedSet = new Set(game.proposedTeam);
   const leader = players.find((p) => p.seat === game.leaderSeat);
   const excaliburHolder = game.hasExcalibur && !game.excaliburUsed && players.find((p) => p.seat === game.excaliburHolderSeat);
+  // Same shape as MissionPanel's stuck-quest notice: nobody knows who
+  // specifically hasn't voted yet (in-progress choices are secret), so this
+  // just checks whether *anyone* is disconnected -- sp_force_resolve_team_vote
+  // is a safe no-op speculative call regardless (only fills in seats that
+  // are both disconnected and actually still missing a vote).
+  const hasDisconnectedPlayer = players.some((p) => !p.connected);
 
   return (
     <div className="phase-panel">
@@ -43,6 +49,18 @@ export default function VotePanel({ room, onVote }) {
         <p className="hint">
           Vote submitted — waiting on {players.length - game.votesInSoFar} more player{players.length - game.votesInSoFar === 1 ? '' : 's'}…
         </p>
+      )}
+
+      {you.isHost && hasDisconnectedPlayer && (
+        <div className="stuck-mission-notice">
+          <p className="hint">
+            Someone at the table is disconnected and may not have voted yet. You can force it through — anyone still
+            missing gets counted as an Approve on their behalf.
+          </p>
+          <button type="button" className="btn btn-ghost" onClick={onForceResolve}>
+            ⚡ Force-resolve stuck vote
+          </button>
+        </div>
       )}
     </div>
   );
