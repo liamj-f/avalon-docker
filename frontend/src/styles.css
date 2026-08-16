@@ -1,5 +1,11 @@
+/* Dark (the app's designed default look, and what everyone gets whose OS
+   either has no preference or explicitly prefers dark) lives unconditionally
+   on bare :root so it's never at the mercy of a media query. Light is purely
+   additive: anyone whose OS says prefers-color-scheme: light gets the
+   parchment palette below instead, nobody else's experience changes. */
 :root {
   --bg: #0f1420;
+  --bg-glow: #1b2440;
   --bg-alt: #161d2e;
   --card: #1a2338;
   --card-border: #2b3555;
@@ -17,6 +23,26 @@
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4ecd8;
+    --bg-glow: #fffdf6;
+    --bg-alt: #ece0c4;
+    --card: #fbf6ea;
+    --card-border: #cbb98a;
+    --gold: #96731d;
+    --gold-bright: #7a5c14;
+    --text: #2b2213;
+    --text-dim: #6b5d42;
+    --good: #2f5fa8;
+    --good-bg: rgba(47, 95, 168, 0.12);
+    --evil: #a3372f;
+    --evil-bg: rgba(163, 55, 47, 0.12);
+    --success: #2f7d4f;
+    --danger: #a3372f;
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -29,7 +55,7 @@ body,
 
 body {
   margin: 0;
-  background: radial-gradient(ellipse at top, #1b2440 0%, var(--bg) 60%);
+  background: radial-gradient(ellipse at top, var(--bg-glow) 0%, var(--bg) 60%);
   color: var(--text);
 }
 
@@ -529,6 +555,15 @@ button {
   margin-left: auto;
 }
 
+.btn-danger-tiny {
+  border-color: var(--evil);
+  color: var(--evil);
+}
+
+.btn-danger-tiny:hover {
+  background: var(--evil-bg);
+}
+
 .team-chip-neutral {
   background: var(--card-border);
   color: var(--text-dim);
@@ -596,6 +631,18 @@ button {
   font-size: 0.85rem;
   color: var(--text-dim);
   margin: 0 0 12px;
+}
+
+.stuck-mission-notice {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--evil);
+  border-radius: 8px;
+  background: var(--evil-bg);
+}
+
+.stuck-mission-notice .hint {
+  margin: 0 0 8px;
 }
 
 .error-list {

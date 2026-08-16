@@ -103,6 +103,9 @@ function useMemoActions(dispatch) {
   const submitMissionVote = useCallback((success, reverse = false) => {
     socket.emit('game:submitMissionVote', { success, reverse });
   }, []);
+  const forceResolveMission = useCallback(() => {
+    socket.emit('game:forceResolveMission', {});
+  }, []);
   const submitAssassination = useCallback((targetSeats) => {
     socket.emit('game:submitAssassination', { targetSeats });
   }, []);
@@ -124,6 +127,9 @@ function useMemoActions(dispatch) {
   const transferHost = useCallback((targetSeat) => {
     socket.emit('room:transferHost', { targetSeat });
   }, []);
+  const kickPlayer = useCallback((targetSeat) => {
+    socket.emit('room:kickPlayer', { targetSeat });
+  }, []);
   const sendChat = useCallback((message) => {
     socket.emit('chat:send', { message });
   }, []);
@@ -139,6 +145,7 @@ function useMemoActions(dispatch) {
     proposeTeam,
     submitTeamVote,
     submitMissionVote,
+    forceResolveMission,
     submitAssassination,
     revealArthur,
     useLadyOfLake,
@@ -146,6 +153,7 @@ function useMemoActions(dispatch) {
     submitExcaliburDecision,
     setRolePreference,
     transferHost,
+    kickPlayer,
     sendChat,
     clearError,
   };

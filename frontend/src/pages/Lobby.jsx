@@ -4,9 +4,13 @@ import { ROLE_TOGGLES, EXTENSION_TOGGLES, validateSettingsClient } from '../game
 import { PlayerShield } from '../components/PlayerAvatar.jsx';
 
 export default function Lobby() {
-  const { state, updateSettings, startGame, leaveRoom, setRolePreference, transferHost } = useGame();
+  const { state, updateSettings, startGame, leaveRoom, setRolePreference, transferHost, kickPlayer } = useGame();
   const { room } = state;
   const { you, players, settings, minPlayers, maxPlayers, rolePreferenceTally, rolesHidden } = room;
+
+  const kick = (p) => {
+    if (window.confirm(`Remove ${p.displayName} from the room?`)) kickPlayer(p.seat);
+  };
 
   const errors = validateSettingsClient(players.length, settings);
   const notEnoughPlayers = players.length < minPlayers;
@@ -96,6 +100,11 @@ export default function Lobby() {
               {you?.isHost && p.seat !== you.seat && p.connected && (
                 <button type="button" className="btn btn-ghost btn-tiny" onClick={() => transferHost(p.seat)}>
                   Make host
+                </button>
+              )}
+              {you?.isHost && p.seat !== you.seat && (
+                <button type="button" className="btn btn-ghost btn-tiny btn-danger-tiny" onClick={() => kick(p)}>
+                  Kick
                 </button>
               )}
             </li>

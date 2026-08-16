@@ -1,11 +1,18 @@
 import React from 'react';
 import PlayerAvatar from './PlayerAvatar.jsx';
 
-export default function MissionPanel({ room, onPlayCard }) {
+export default function MissionPanel({ room, onPlayCard, onForceResolve }) {
   const { game, players, you } = room;
   const onTeam = game.proposedTeam.includes(you.seat);
   const proposedSet = new Set(game.proposedTeam);
   const canReverse = you.roleId === 'LANCELOT' && you.hasReverseCard;
+
+  // Only surfaced once there's an actual reason to reach for it -- the
+  // quest is still short cards and at least one of the missing seats is
+  // offline, not just slow to act.
+  const missionIncomplete = game.missionVotesInSoFar < game.proposedTeam.length;
+  const hasStuckTeammate =
+    missionIncomplete && game.proposedTeam.some((seat) => players.find((p) => p.seat === seat)?.connected === false);
 
   return (
     <div className="phase-panel">
@@ -49,6 +56,18 @@ export default function MissionPanel({ room, onPlayCard }) {
         <p className="hint">
           You&rsquo;re not on this quest ({game.missionVotesInSoFar}/{game.proposedTeam.length} cards played). Sit tight.
         </p>
+      )}
+
+      {you.isHost && hasStuckTeammate && (
+        <div className="stuck-mission-notice">
+          <p className="hint">
+            Someone on this quest is disconnected and hasn&rsquo;t played a card. You can force it through — anyone
+            still missing gets auto-played as Success on their behalf (or Fail, if they&rsquo;re Agravain).
+          </p>
+          <button type="button" className="btn btn-ghost" onClick={onForceResolve}>
+            ⚡ Force-resolve stuck quest
+          </button>
+        </div>
       )}
     </div>
   );

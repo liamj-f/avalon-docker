@@ -43,6 +43,14 @@ services:
       DB_HOST: db
       DB_PORT: 5432
       CORS_ORIGIN: "*"
+    healthcheck:
+      # No curl/wget in python:3.12-slim -- urllib is stdlib, so this needs
+      # nothing extra installed in the image.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/api/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     depends_on:
       db:
         condition: service_healthy
@@ -61,8 +69,16 @@ services:
       BACKEND_PORT: 4000
     ports:
       - "${FRONTEND_PORT:-8080}:80"
+    healthcheck:
+      # nginx:1.27-alpine has no curl, but alpine's busybox wget is built in.
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   avalon-pgdata:

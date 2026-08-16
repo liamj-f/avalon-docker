@@ -17,6 +17,16 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        # uvicorn's ProxyHeadersMiddleware (see backend main.py) reads
+        # X-Forwarded-For specifically, not X-Real-IP -- set so the
+        # backend's notion of "the client" is correct for logging/fail2ban.
+        # $proxy_add_x_forwarded_for (append), not $remote_addr (clobber):
+        # if docker-compose.proxy-network.yml is in use and something else
+        # is already proxying to this container, that hop's own
+        # X-Forwarded-For survives instead of being overwritten -- this
+        # nginx's $remote_addr (that outer proxy's IP) is only appended to
+        # it. uvicorn walks the whole chain back to the original client.
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 
     # WebSocket (Socket.IO) — long-lived connections, upgrade headers required.
@@ -27,6 +37,7 @@ server {
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_read_timeout 3600s;
     }
 

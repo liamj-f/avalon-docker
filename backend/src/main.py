@@ -86,7 +86,22 @@ async def main() -> None:
     attach_game_listener(_on_game_changed)
     asyncio.create_task(_reap_loop())
 
-    config = uvicorn.Config(app, host="0.0.0.0", port=PORT, log_level="info")
+    config = uvicorn.Config(
+        app,
+        host="0.0.0.0",
+        port=PORT,
+        log_level="info",
+        # Trusts X-Forwarded-For from *any* peer, which would be dangerous
+        # on a backend directly reachable from the internet -- a client
+        # could just lie about its own IP. It isn't, here: docker-compose.yml
+        # never publishes a host port for this service, so nginx (which
+        # sets X-Forwarded-For itself, overwriting rather than appending --
+        # see nginx.conf.template) is the only thing that can ever reach it.
+        # uvicorn's own default (trust only 127.0.0.1) would be *wrong* for
+        # that setup, since nginx is a separate container reached over the
+        # compose network, not loopback.
+        forwarded_allow_ips="*",
+    )
     server = uvicorn.Server(config)
     logger.info("[server] Avalon backend listening on :%s", PORT)
     await server.serve()

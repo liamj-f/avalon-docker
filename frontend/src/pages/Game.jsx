@@ -10,6 +10,7 @@ import ExcaliburPanel from '../components/ExcaliburPanel.jsx';
 import EndScreen from '../components/EndScreen.jsx';
 import ArthurReveal from '../components/ArthurReveal.jsx';
 import Chat from '../components/Chat.jsx';
+import PlayerRoster from '../components/PlayerRoster.jsx';
 import VoteHistory from '../components/VoteHistory.jsx';
 import QuestResultModal from '../components/QuestResultModal.jsx';
 import { QUEST_FLAVOR } from '../gameData.js';
@@ -30,11 +31,13 @@ export default function Game() {
     proposeTeam,
     submitTeamVote,
     submitMissionVote,
+    forceResolveMission,
     submitAssassination,
     revealArthur,
     useLadyOfLake,
     submitExcaliburView,
     submitExcaliburDecision,
+    kickPlayer,
   } = useGame();
   const { room } = state;
   const { game } = room;
@@ -115,7 +118,9 @@ export default function Game() {
         <div className="card">
           {game.phase === 'team_building' && <TeamBuilder room={viewRoom} onPropose={proposeTeam} />}
           {game.phase === 'team_voting' && <VotePanel room={viewRoom} onVote={submitTeamVote} />}
-          {game.phase === 'mission' && <MissionPanel room={viewRoom} onPlayCard={submitMissionVote} />}
+          {game.phase === 'mission' && (
+            <MissionPanel room={viewRoom} onPlayCard={submitMissionVote} onForceResolve={forceResolveMission} />
+          )}
           {game.phase === 'lady_of_lake' && <LadyOfLakePanel room={viewRoom} onUse={useLadyOfLake} />}
           {game.phase === 'excalibur_decision' && (
             <ExcaliburPanel room={viewRoom} onView={submitExcaliburView} onDecide={submitExcaliburDecision} />
@@ -128,6 +133,7 @@ export default function Game() {
       </div>
 
       <div className="game-sidebar">
+        <PlayerRoster room={viewRoom} onKick={kickPlayer} />
         <Chat chat={room.chat} />
       </div>
     </div>
