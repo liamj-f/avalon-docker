@@ -20,6 +20,12 @@
   --success: #4caf6d;
   --danger: #e05a5a;
   --radius: 12px;
+  /* Text sitting *on* --good-bg/--evil-bg (Approve/Success, Reject/Fail,
+     toasts, warning badges) -- pale so it reads on the dark theme's own
+     near-black tint. Needs its own dark, saturated pair in light mode
+     instead (see below) or it's nearly invisible on the pale tint there. */
+  --good-text: #cfe2ff;
+  --evil-text: #ffd7d7;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
@@ -40,6 +46,8 @@
     --evil-bg: rgba(163, 55, 47, 0.12);
     --success: #2f7d4f;
     --danger: #a3372f;
+    --good-text: #1c3f78;
+    --evil-text: #7a2420;
   }
 }
 
@@ -170,7 +178,7 @@ button {
 .toast-error {
   background: var(--evil-bg);
   border: 1px solid var(--evil);
-  color: #ffd7d7;
+  color: var(--evil-text);
 }
 
 .toast-update {
@@ -315,13 +323,13 @@ button {
 .btn-approve {
   background: var(--good-bg);
   border-color: var(--good);
-  color: #cfe2ff;
+  color: var(--good-text);
 }
 
 .btn-reject {
   background: var(--evil-bg);
   border-color: var(--evil);
-  color: #ffd7d7;
+  color: var(--evil-text);
 }
 
 .lobby-grid {
@@ -416,7 +424,7 @@ button {
 
 .badge-warn {
   background: var(--evil-bg);
-  color: #ffd7d7;
+  color: var(--evil-text);
 }
 
 .hint {
@@ -646,7 +654,7 @@ button {
 }
 
 .error-list {
-  color: #ffd7d7;
+  color: var(--evil-text);
   font-size: 0.82rem;
   background: var(--evil-bg);
   border: 1px solid var(--evil);
@@ -901,6 +909,19 @@ button.mission-pip:hover {
   padding: 4px 12px;
 }
 
+.avatar-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.avatar-legend-item {
+  white-space: nowrap;
+}
+
 .phase-panel {
   display: flex;
   flex-direction: column;
@@ -966,6 +987,15 @@ button.mission-pip:hover {
 .avatar-crown {
   position: absolute;
   top: -14px;
+}
+
+.avatar-badge-topright {
+  position: absolute;
+  top: -14px;
+  right: 2px;
+  font-size: 1rem;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
 }
 
 .avatar-leader {

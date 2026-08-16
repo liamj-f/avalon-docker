@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useGame } from '../store.jsx';
 
-export default function Chat({ chat }) {
+export default function Chat({ chat, muted }) {
   const { sendChat } = useGame();
   const [message, setMessage] = useState('');
   const listRef = useRef(null);
@@ -29,17 +29,21 @@ export default function Chat({ chat }) {
           </div>
         ))}
       </div>
-      <form onSubmit={submit} className="chat-form">
-        <input
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="Say something…"
-          maxLength={500}
-        />
-        <button type="submit" className="btn btn-ghost">
-          Send
-        </button>
-      </form>
+      {muted ? (
+        <p className="hint">🔇 The host has muted you — you can still read the table, but not send messages.</p>
+      ) : (
+        <form onSubmit={submit} className="chat-form">
+          <input
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Say something…"
+            maxLength={500}
+          />
+          <button type="submit" className="btn btn-ghost">
+            Send
+          </button>
+        </form>
+      )}
     </div>
   );
 }

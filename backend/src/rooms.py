@@ -40,12 +40,10 @@ class Player:
     socket_id: str | None = None
     connected: bool = False
     is_host: bool = False
-    # Set only by Room.kick_player, and only meaningful mid-game (a lobby
-    # kick removes the Player outright, same as leaving). Checked by
-    # handle_room_rejoin so a kicked player's own tab can't silently
-    # reconnect itself via its still-stored token after the host removes
-    # them -- a plain disconnect must stay recoverable, a kick must not.
-    kicked: bool = False
+    # Host-only moderation tool for once the game has started, when
+    # kick_player is no longer available (see there) -- silences chat
+    # without touching the seat/role a dealt game depends on.
+    muted: bool = False
 
 
 class Room:
@@ -109,31 +107,42 @@ class Room:
                 player.connected = False
 
     def kick_player(self, token: str, target_seat: int) -> str | None:
-        """Host-only removal of another player. In the lobby this is just an
-        outright removal (same as them leaving -- the seat is free again).
-        Mid-game a seat can't be un-dealt without unraveling the whole game,
-        so this instead permanently marks them kicked (blocking any future
-        room:rejoin with their token) and returns their current socket_id,
-        if connected, so the caller can force-disconnect that live
-        connection on the spot rather than waiting for it to drop on its
-        own. Returns None when there's no live connection to kick."""
+        """Host-only removal of another player, lobby-only. Once a game has
+        started, a seat can't be un-dealt without unraveling the whole
+        game -- roles, knowledge, and vote history are all keyed off it --
+        so this deliberately stops working the instant start_game succeeds.
+        The host's mid-game moderation tool is set_muted instead, which
+        doesn't touch the seat at all. Returns the target's current
+        socket_id (if connected) so the caller can force-disconnect that
+        live connection immediately, rather than leaving them sitting in a
+        lobby that no longer includes them until they next take some
+        action."""
         if token != self.host_token:
             raise GameError("Only the host can remove a player.")
+        if self.phase != "lobby":
+            raise GameError("Players can only be removed before the game starts -- mute them in chat instead.")
         target = next((p for p in self.player_list if p.seat_index == target_seat), None)
         if target is None:
             raise GameError("That player is not in this room.")
         if target.token == token:
             raise GameError("You can't remove yourself -- use Leave instead.")
 
-        if self.phase == "lobby":
-            self.remove_player(target.token)
-            return None
-
-        target.kicked = True
-        target.connected = False
         sid = target.socket_id
-        target.socket_id = None
+        self.remove_player(target.token)
         return sid
+
+    def set_muted(self, token: str, target_seat: int, muted: bool) -> None:
+        """Host-only chat moderation. Available in any phase (mid-game is
+        the case that actually matters, since Chat only renders once a game
+        has started -- see Game.jsx), unlike kick_player."""
+        if token != self.host_token:
+            raise GameError("Only the host can mute a player.")
+        target = next((p for p in self.player_list if p.seat_index == target_seat), None)
+        if target is None:
+            raise GameError("That player is not in this room.")
+        if target.token == token:
+            raise GameError("You can't mute yourself.")
+        target.muted = muted
 
     def is_empty(self) -> bool:
         if not self.players:
@@ -293,12 +302,24 @@ class Room:
             "rolesHidden": self.hide_role_selections,
             "rolePreferenceTally": role_preference_tally,
             "you": (
-                {"seat": seat, "displayName": player.display_name, "isHost": player.is_host, "token": player.token}
+                {
+                    "seat": seat,
+                    "displayName": player.display_name,
+                    "isHost": player.is_host,
+                    "token": player.token,
+                    "muted": player.muted,
+                }
                 if player
                 else None
             ),
             "players": [
-                {"seat": p.seat_index, "displayName": p.display_name, "isHost": p.is_host, "connected": p.connected}
+                {
+                    "seat": p.seat_index,
+                    "displayName": p.display_name,
+                    "isHost": p.is_host,
+                    "connected": p.connected,
+                    "muted": p.muted,
+                }
                 for p in self.player_list
             ],
             "chat": self.chat,
