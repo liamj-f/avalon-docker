@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import PlayerAvatar from './PlayerAvatar.jsx';
+import StuckPhaseNotice from './StuckPhaseNotice.jsx';
 
-export default function TeamBuilder({ room, onPropose }) {
+export default function TeamBuilder({ room, onPropose, onForceAdvanceLeader }) {
   const { game, players, you } = room;
   const teamSize = game.teamSizes[game.missionNumber];
   const isLeader = you.seat === game.leaderSeat;
   const [selected, setSelected] = useState([]);
   const [excaliburSeat, setExcaliburSeat] = useState(null);
   const needsExcalibur = game.hasExcalibur && !game.excaliburUsed;
+
+  // Unlike the other stuck-phase notices, this doesn't need to check
+  // "has anyone actually acted yet" -- there's no partial state at
+  // team-building (either a team's been proposed, moving the phase along
+  // entirely, or it hasn't). The only question is whether the one seat
+  // that can act right now, the leader, is reachable.
+  const leader = players.find((p) => p.seat === game.leaderSeat);
+  const leaderStuck = !isLeader && leader && !leader.connected;
 
   useEffect(() => {
     setSelected([]);
@@ -90,6 +99,15 @@ export default function TeamBuilder({ room, onPropose }) {
           Propose Team ({selected.length}/{teamSize})
           {needsExcalibur ? excaliburSeat === null ? ' — pick Excalibur holder' : '' : ''}
         </button>
+      )}
+
+      {you.isHost && leaderStuck && (
+        <StuckPhaseNotice
+          message={`${leader.displayName} is disconnected and can't propose a team. You can force it through — leadership passes to the next player, same as a real rejected vote would, but without counting against the 5-rejections track.`}
+          buttonLabel="Force-advance stuck leader"
+          confirmMessage={`Skip ${leader.displayName}'s turn as leader? It'll pass to the next player instead.`}
+          onClick={onForceAdvanceLeader}
+        />
       )}
     </div>
   );

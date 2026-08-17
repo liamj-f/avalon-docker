@@ -188,6 +188,40 @@ def test_chat_rate_limit_blocks_after_threshold():
         room.check_chat_rate_limit(token)
 
 
+# ---------------------------------------------------------------------------
+# Unique display names per room
+# ---------------------------------------------------------------------------
+
+
+def test_duplicate_display_name_rejected():
+    room = Room("ABCDE")
+    room.add_player("Alice", as_host=True)
+    with pytest.raises(GameError, match="already taken"):
+        room.add_player("Alice")
+
+
+def test_duplicate_display_name_rejected_case_and_whitespace_insensitive():
+    room = Room("ABCDE")
+    room.add_player("Alice", as_host=True)
+    with pytest.raises(GameError, match="already taken"):
+        room.add_player("  alice ")
+
+
+def test_distinct_display_names_allowed():
+    room = Room("ABCDE")
+    room.add_player("Alice", as_host=True)
+    bob = room.add_player("Bob")  # should not raise
+    assert bob.display_name == "Bob"
+
+
+def test_display_name_freed_up_after_that_player_leaves():
+    room = Room("ABCDE")
+    room.add_player("Alice", as_host=True)
+    bob = room.add_player("Bob")
+    room.remove_player(bob.token)
+    room.add_player("Bob")  # should not raise -- the seat's gone, name's free again
+
+
 def test_add_chat_message_defaults_to_not_system():
     room = Room("ABCDE")
     entry = room.add_chat_message("Alice", "hello")
