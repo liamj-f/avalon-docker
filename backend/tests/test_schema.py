@@ -33,6 +33,7 @@ EXPECTED_FUNCTIONS = {
     "sp_submit_assassination",
     "sp_force_pass_assassination",
     "sp_reveal_arthur",
+    "sp_force_advance_leader",
 }
 
 

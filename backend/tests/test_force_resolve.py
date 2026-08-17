@@ -244,3 +244,51 @@ async def test_force_pass_assassination_wrong_phase_rejected(pool):
     game_id = await start_game(pool, player_count=5, roles=ASSASSIN_ROLES)
     with pytest.raises(Exception, match="assassination phase"):
         await pool.execute("SELECT sp_force_pass_assassination($1)", game_id)
+
+
+# ---------------------------------------------------------------------------
+# sp_force_advance_leader
+# ---------------------------------------------------------------------------
+
+
+async def test_force_advance_leader_moves_to_next_seat(pool):
+    game_id = await start_game(pool, player_count=5, leader_seat=0)
+
+    await pool.execute("SELECT sp_force_advance_leader($1)", game_id)
+
+    game = await get_game(pool, game_id)
+    assert game["phase"] == "team_building"
+    assert game["leader_seat"] == 1
+
+
+async def test_force_advance_leader_wraps_around(pool):
+    game_id = await start_game(pool, player_count=5, leader_seat=4)
+
+    await pool.execute("SELECT sp_force_advance_leader($1)", game_id)
+
+    game = await get_game(pool, game_id)
+    assert game["leader_seat"] == 0
+
+
+async def test_force_advance_leader_does_not_touch_rejection_count(pool):
+    """Skipping a stuck leader's turn is not a rejected proposal -- it must
+    never contribute to the 5-rejections-in-a-row auto-loss track."""
+    game_id = await start_game(pool, player_count=5, leader_seat=0)
+
+    for _ in range(4):
+        await pool.execute("SELECT sp_force_advance_leader($1)", game_id)
+
+    game = await get_game(pool, game_id)
+    assert game["phase"] == "team_building"  # not game_over
+    assert game["rejection_count"] == 0
+    assert game["leader_seat"] == 4
+
+
+async def test_force_advance_leader_rejected_once_team_proposed(pool):
+    """Once a team's actually been proposed, the stuck-leader case doesn't
+    apply anymore -- that's sp_force_resolve_team_vote's job instead."""
+    game_id = await start_game(pool, player_count=5, leader_seat=0)
+    await pool.execute("SELECT sp_propose_team($1,$2,$3)", game_id, 0, [0, 1])
+
+    with pytest.raises(Exception, match="waiting on a team proposal"):
+        await pool.execute("SELECT sp_force_advance_leader($1)", game_id)

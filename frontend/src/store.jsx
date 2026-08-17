@@ -97,6 +97,9 @@ function useMemoActions(dispatch) {
   const proposeTeam = useCallback((seats, excaliburSeat) => {
     socket.emit('game:proposeTeam', { seats, excaliburSeat });
   }, []);
+  const forceAdvanceLeader = useCallback(() => {
+    socket.emit('game:forceAdvanceLeader', {});
+  }, []);
   const submitTeamVote = useCallback((approve) => {
     socket.emit('game:submitTeamVote', { approve });
   }, []);
@@ -158,6 +161,7 @@ function useMemoActions(dispatch) {
     resetToLobby,
     leaveRoom,
     proposeTeam,
+    forceAdvanceLeader,
     submitTeamVote,
     forceResolveTeamVote,
     submitMissionVote,

@@ -223,6 +223,42 @@ button {
   border-top: 1px solid var(--card-border);
 }
 
+.app-footer-roster {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-footer-sep {
+  opacity: 0.6;
+}
+
+.app-footer-role {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.app-footer-role:hover,
+.app-footer-role-active {
+  color: var(--gold);
+  background: var(--card-border);
+}
+
+.app-footer-description {
+  max-width: 560px;
+  margin: 8px auto 0;
+  color: var(--text);
+  line-height: 1.4;
+}
+
 .toast {
   position: fixed;
   top: 16px;

@@ -84,6 +84,11 @@ async def force_resolve_team_vote(game_id: UUID, disconnected_seats: list[int]) 
     await pool.execute("SELECT sp_force_resolve_team_vote($1,$2)", game_id, disconnected_seats)
 
 
+async def force_advance_leader(game_id: UUID) -> None:
+    pool = await get_pool()
+    await pool.execute("SELECT sp_force_advance_leader($1)", game_id)
+
+
 async def force_decline_excalibur(game_id: UUID) -> None:
     pool = await get_pool()
     await pool.execute("SELECT sp_force_decline_excalibur($1)", game_id)

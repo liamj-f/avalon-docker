@@ -84,11 +84,19 @@ class Room:
         if len(self.players) >= MAX_PLAYERS:
             raise GameError(f"Room is full (max {MAX_PLAYERS} players).")
 
+        display_name = display_name[:30]
+        # Case/whitespace-insensitive -- "Alice" and " alice " are the same
+        # collision as far as anyone reading seat labels, chat, or the vote
+        # history is concerned, all of which key purely off this string with
+        # no seat number attached to disambiguate.
+        if any(p.display_name.strip().casefold() == display_name.strip().casefold() for p in self.players.values()):
+            raise GameError(f'"{display_name}" is already taken in this room -- pick a different name.')
+
         token = str(uuid.uuid4())
         player = Player(
             token=token,
             seat_index=self.next_seat_index,
-            display_name=display_name[:30],
+            display_name=display_name,
             is_host=as_host,
         )
         self.next_seat_index += 1

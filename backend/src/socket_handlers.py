@@ -272,6 +272,23 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         )
         await broadcast_room(room)
 
+    async def handle_force_advance_leader(room: Room, player, _data: dict[str, Any]) -> None:
+        # Host-only, same as every other force-resolve. Unlike the vote/
+        # mission cases there's no "who's still missing" set to gather --
+        # sp_force_advance_leader only cares whether a team's already been
+        # proposed this turn (checked there), not which seat is currently
+        # connected, so the frontend is the only place that gates this on
+        # the leader actually being offline.
+        if player.token != room.host_token:
+            raise GameError("Only the host can force-advance a stuck leader.")
+        await game_db.force_advance_leader(room.game_id)
+        room.add_chat_message(
+            player.display_name,
+            "⚡ Force-advanced the stuck leader — the team-building turn passed to the next player.",
+            system=True,
+        )
+        await broadcast_room(room)
+
     async def handle_submit_mission_vote(room: Room, player, data: dict[str, Any]) -> None:
         await game_db.cast_mission_vote(
             room.game_id, player.seat_index, bool(data.get("success")), bool(data.get("reverse"))
@@ -403,6 +420,7 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
     sio.on("room:leave", with_room(handle_room_leave))
     sio.on("room:kickPlayer", with_room(handle_kick_player))
     sio.on("game:proposeTeam", with_room(handle_propose_team))
+    sio.on("game:forceAdvanceLeader", with_room(handle_force_advance_leader))
     sio.on("game:submitTeamVote", with_room(handle_submit_team_vote))
     sio.on("game:forceResolveTeamVote", with_room(handle_force_resolve_team_vote))
     sio.on("game:submitMissionVote", with_room(handle_submit_mission_vote))

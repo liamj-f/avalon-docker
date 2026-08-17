@@ -29,6 +29,7 @@ export default function Game() {
   const {
     state,
     proposeTeam,
+    forceAdvanceLeader,
     submitTeamVote,
     forceResolveTeamVote,
     submitMissionVote,
@@ -125,7 +126,9 @@ export default function Game() {
         </div>
 
         <div className="card">
-          {game.phase === 'team_building' && <TeamBuilder room={viewRoom} onPropose={proposeTeam} />}
+          {game.phase === 'team_building' && (
+            <TeamBuilder room={viewRoom} onPropose={proposeTeam} onForceAdvanceLeader={forceAdvanceLeader} />
+          )}
           {game.phase === 'team_voting' && (
             <VotePanel room={viewRoom} onVote={submitTeamVote} onForceResolve={forceResolveTeamVote} />
           )}

@@ -8,6 +8,10 @@ of truth for every game in progress — not just a history log.
 ## Features
 
 - **Lobbies**: create a room, share a short code, friends join from any browser.
+  Display names must be unique within a room (case/whitespace-insensitive) —
+  seats, chat, and the vote history all key off the name alone with no seat
+  number attached, so two "Alice"s would be genuinely ambiguous, not just
+  visually confusing.
 - **Role selection with a lobby poll**: the host has final say on which
   characters/extensions are in play, but every player can cast a non-binding
   👍 preference vote on each one — the host sees the tally live while deciding.
@@ -58,6 +62,10 @@ of truth for every game in progress — not just a history log.
   invisible to everyone else in the lobby until the game starts (their own
   view, and the vote tally, are unaffected) — for groups that don't want to
   telegraph the roster while people are still joining.
+- **Character key footer**: the footer lists whichever characters/extensions
+  the room actually has in play (not a fixed default list); pressing a name
+  expands its description in place, so checking what e.g. Agravain or
+  Guinevere does doesn't mean leaving to look up the rules.
 
 ## Architecture — Postgres is the game
 
@@ -369,14 +377,18 @@ backend/
                            # team_votes, mission_cards, lady_of_lake_events, excalibur_events,
                            # mission_config
     002_procedures.sql     # the actual game engine, as PL/pgSQL stored procedures
+    003_force_advance_leader.sql  # sp_force_advance_leader -- added after 001+002 already
+                                   # shipped, so this is a real incremental migration, not
+                                   # folded into the baseline (see the migration runner note above)
 frontend/
   src/
     pages/            # Home, Lobby, Game
     components/        # TeamBuilder, VotePanel, MissionPanel, AssassinPanel, LadyOfLakePanel,
                         # ExcaliburPanel, ArthurReveal, EndScreen, RoleCard, MissionTrack, Chat, PlayerAvatar,
-                        # VoteHistory, QuestResultPopup, StuckPhaseNotice
+                        # VoteHistory, QuestResultPopup, StuckPhaseNotice, CharacterFooter
                         # *.test.{js,jsx} sit next to the file they cover (gameData.test.js,
-                        # components/StuckPhaseNotice.test.jsx, PlayerAvatar.test.jsx, Chat.test.jsx)
+                        # components/StuckPhaseNotice.test.jsx, PlayerAvatar.test.jsx, Chat.test.jsx,
+                        # CharacterFooter.test.jsx)
     test/setup.js        # @testing-library/jest-dom matchers, loaded by vitest.config.js
     store.jsx           # Socket.IO client + app state (React context)
     PwaUpdatePrompt.jsx  # "new version available" toast -- see PWA design note
@@ -779,7 +791,7 @@ a new information channel.
 Every phase that needs a specific seat (or seats) to act before the game
 can move on previously had no recovery if that seat dropped mid-phase —
 the only way out was the host resetting the entire game back to the lobby.
-Five stored procedures now give the host a phase-appropriate way to force
+Six stored procedures now give the host a phase-appropriate way to force
 that phase to a conclusion instead, each shaped by what's actually fair to
 assume on a missing player's behalf:
 
@@ -813,18 +825,39 @@ assume on a missing player's behalf:
   so there's no "host picks a target" option the way Lady of the Lake has;
   forcing a guess would mean the host guessing blind with no more
   information than anyone else at the table.
+- **`sp_force_advance_leader`**: the odd one out, added later once a
+  disconnected *leader* turned out to be a gap none of the above covered —
+  team-building has no partial state to fill in the way a vote or mission
+  does (nobody proposes a team *for* someone else; there's no charitable
+  default for who they'd have picked), so the only fair move is skipping
+  their turn entirely, the same as a real player passing the conch to
+  whoever's next. Deliberately leaves `rejection_count` untouched — that
+  track (and the 5-rejections-in-a-row auto-loss it drives) is specifically
+  about proposals the table actually voted down, not turns skipped because
+  a seat went unreachable, so this alone can never end the game. Only valid
+  before a team's proposed that turn; once it has, phase is already
+  `team_voting` and a stuck leader from there on is
+  `sp_force_resolve_team_vote`'s job instead.
 
-All five are host-only and safe to call speculatively — each checks its
-own phase and, where relevant, whether a seat already acted, so calling
-one when nothing's actually stuck is a no-op rather than an error. The
-frontend only ever shows the button once there's a real reason to reach
-for it: `MissionPanel`/`VotePanel` check `players[].connected` directly
-(team/vote membership is already public); `ExcaliburPanel`/
-`LadyOfLakePanel` do the same since both holders are public tokens at the
-table. The Assassin isn't — `AssassinPanel`'s button is gated on
-`game.assassinDisconnected`, a plain boolean `rooms.py` computes
-server-side (cross-referencing the secret assassin seat against live
-connection state) specifically so the *seat* itself is never sent to
+The first five are host-only and safe to call speculatively — each checks
+its own phase and, where relevant, whether a seat already acted, so calling
+one when nothing's actually stuck is a no-op rather than an error.
+`sp_force_advance_leader` is the exception: it has no missing-input state to
+check against (there's nothing for it to notice is "still missing"), so
+unlike the other five it isn't a no-op if called when the leader isn't
+actually stuck — it unconditionally advances the leader whenever a team
+hasn't been proposed yet this turn. Same shape as `sp_force_decline_excalibur`
+in that respect — no connection check in the SQL itself, so host-gating plus
+the frontend only showing the button when there's a real reason to are the
+only guardrails, for both. The frontend only ever shows the button once
+there's a real reason to reach for it: `MissionPanel`/`VotePanel` check
+`players[].connected` directly (team/vote membership is already public);
+`ExcaliburPanel`/`LadyOfLakePanel` do the same since both holders are
+public tokens at the table; `TeamBuilder` checks the current leader seat's
+connection state the same way. The Assassin isn't — `AssassinPanel`'s
+button is gated on `game.assassinDisconnected`, a plain boolean `rooms.py`
+computes server-side (cross-referencing the secret assassin seat against
+live connection state) specifically so the *seat* itself is never sent to
 clients who aren't the Assassin.
 
 All five are host-only, which surfaced a bigger hole they were built to
@@ -1166,3 +1199,33 @@ but the containers themselves haven't been built in this environment.
   build` still succeeds after all of the above, and a fresh `npm ci` against
   the committed lockfile installs cleanly — both wired into
   `.github/workflows/frontend-tests.yml`.
+- **Force-advance a stuck leader, unique display names, and the clickable
+  character-key footer**: verified live in one more 5-browser-context
+  Playwright run. Joining a room with a name differing only by case and
+  surrounding whitespace from an existing player (`"  alice  "` against an
+  existing `Alice`) was rejected with the exact toast text `add_player`
+  now raises (`"alice" is already taken in this room -- pick a different
+  name."`), and the rejected client stayed on the join screen instead of
+  landing in the room. In the lobby,
+  clicking "Merlin" in the character-key footer expanded its real
+  description text in place, clicking it again collapsed it, and clicking
+  a different name (`Assassin`) swapped which one was open rather than
+  showing both — confirmed via `CharacterFooter.test.jsx` too, not just
+  this live pass. Once the game started, whichever seat randomly landed as
+  quest 1's leader (Dave, this run) had its browser context closed before
+  proposing a team; the host (Alice) immediately saw a
+  "Force-advance stuck leader" notice, clicking it fired a real
+  `window.confirm()` with the expected text, and accepting it correctly
+  passed the crown to the *next* seat in turn order (Eve, correctly
+  skipping past the already-disconnected Dave, who was still a listed seat
+  the whole time — never removed, just skipped as leader) — confirmed both
+  via the leader-facing UI updating and via a bystander client (Bob, who
+  took no action) seeing the same
+  `"⚡ Force-advanced the stuck leader — the team-building turn passed to
+  the next player. — Alice, host"` system chat line. Backend: 82 pytest
+  tests passing, including new coverage for `sp_force_advance_leader`
+  (moves to the next seat, wraps around from the last seat to the first,
+  never touches `rejection_count` even across repeated calls, and is
+  rejected once a team's actually been proposed) and for the display-name
+  uniqueness check (rejected exact match, rejected case/whitespace variant,
+  distinct names allowed, a name freeing up once that player leaves).
