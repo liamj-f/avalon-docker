@@ -21,7 +21,25 @@ from game_notify import attach_game_listener
 from rooms import RoomManager
 from socket_handlers import create_socket_server
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
+# Always log to stdout (docker logs / Portainer). Additionally log to a file
+# under LOG_DIR so log-file-based tools (e.g. fail2ban) can tail it; this is
+# best-effort so a missing/read-only LOG_DIR degrades to stdout-only rather
+# than crashing the app.
+LOG_DIR = os.environ.get("LOG_DIR", "/app/logs")
+_log_handlers: list[logging.Handler] = [logging.StreamHandler()]
+try:
+    os.makedirs(LOG_DIR, exist_ok=True)
+    _log_handlers.append(logging.FileHandler(os.path.join(LOG_DIR, "access.log")))
+except OSError:
+    logging.getLogger("avalon.server").warning(
+        "could not open LOG_DIR %s for writing; file logging disabled", LOG_DIR
+    )
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(message)s",
+    handlers=_log_handlers,
+)
 logger = logging.getLogger("avalon.server")
 
 PORT = int(os.environ.get("PORT", "4000"))
