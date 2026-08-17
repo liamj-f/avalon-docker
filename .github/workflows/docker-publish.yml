@@ -46,7 +46,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # GHCR requires an all-lowercase image path; github.repository isn't
       # guaranteed to be (repo names can contain uppercase).
