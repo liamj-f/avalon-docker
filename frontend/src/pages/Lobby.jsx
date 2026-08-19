@@ -2,14 +2,26 @@ import React from 'react';
 import { useGame } from '../store.jsx';
 import { ROLE_TOGGLES, EXTENSION_TOGGLES, validateSettingsClient } from '../gameData.js';
 import { PlayerShield } from '../components/PlayerAvatar.jsx';
+import Chat from '../components/Chat.jsx';
 
 export default function Lobby() {
-  const { state, updateSettings, startGame, leaveRoom, setRolePreference, transferHost, kickPlayer } = useGame();
+  const { state, updateSettings, startGame, leaveRoom, setRolePreference, transferHost, kickPlayer, setMuted } =
+    useGame();
   const { room } = state;
   const { you, players, settings, minPlayers, maxPlayers, rolePreferenceTally, rolesHidden } = room;
 
   const kick = (p) => {
     if (window.confirm(`Remove ${p.displayName} from the room?`)) kickPlayer(p.seat);
+  };
+
+  // Same rule as PlayerRoster.jsx's mid-game mute button -- host-only,
+  // can't target yourself (rooms.py's set_muted rejects that server-side
+  // regardless, this just avoids showing a button that would always
+  // error). Mute state persists across the game starting/ending (it lives
+  // on the Player, not reset by reset_to_lobby), so muting someone here
+  // carries straight into the game if one starts.
+  const toggleMuted = (p) => {
+    setMuted(p.seat, !p.muted);
   };
 
   const errors = validateSettingsClient(players.length, settings);
@@ -97,9 +109,20 @@ export default function Lobby() {
               {p.isHost && <span className="badge">Host</span>}
               {p.seat === you?.seat && <span className="badge badge-you">You</span>}
               {!p.connected && <span className="badge badge-warn">offline</span>}
+              {p.muted && <span className="badge badge-warn">muted</span>}
               {you?.isHost && p.seat !== you.seat && p.connected && (
                 <button type="button" className="btn btn-ghost btn-tiny" onClick={() => transferHost(p.seat)}>
                   Make host
+                </button>
+              )}
+              {you?.isHost && p.seat !== you.seat && (
+                <button
+                  type="button"
+                  className={`btn btn-ghost btn-tiny ${p.muted ? '' : 'btn-danger-tiny'}`}
+                  onClick={() => toggleMuted(p)}
+                  title={p.muted ? 'Allow them to send chat messages again' : "Stop their messages from reaching the table"}
+                >
+                  {p.muted ? 'Unmute' : 'Mute'}
                 </button>
               )}
               {you?.isHost && p.seat !== you.seat && (
@@ -158,6 +181,10 @@ export default function Lobby() {
         <button type="button" className="btn btn-primary btn-block" disabled={!canStart} onClick={startGame}>
           {you?.isHost ? 'Start Game' : 'Waiting for host…'}
         </button>
+      </div>
+
+      <div className="card">
+        <Chat chat={room.chat} muted={you?.muted} />
       </div>
     </div>
   );
