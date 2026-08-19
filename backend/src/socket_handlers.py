@@ -156,6 +156,7 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
             room, player = room_manager.create_room(display_name)
             player.connected = True
             player.socket_id = sid
+            player.ip = await current_ip(sid)
             async with sio.session(sid) as session:
                 session["token"] = player.token
             await sio.enter_room(sid, _player_room(player.token))
@@ -167,7 +168,7 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
             # room:join with guessed codes. This line (and the failed-join
             # one below) exists so an external tool like fail2ban can do
             # that throttling instead, from wherever these logs end up.
-            logger.info("[socket] room:create ip=%s code=%s", await current_ip(sid), room.code)
+            logger.info("[socket] room:create ip=%s code=%s", player.ip, room.code)
         except Exception as err:  # noqa: BLE001
             await fail(sid, err)
 
@@ -193,6 +194,7 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
                 raise
             player.connected = True
             player.socket_id = sid
+            player.ip = await current_ip(sid)
             async with sio.session(sid) as session:
                 session["token"] = player.token
             await sio.enter_room(sid, _player_room(player.token))
@@ -211,6 +213,7 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
             room, player = found
             player.connected = True
             player.socket_id = sid
+            player.ip = await current_ip(sid)
             async with sio.session(sid) as session:
                 session["token"] = token
             await sio.enter_room(sid, _player_room(token))
@@ -255,12 +258,20 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         await broadcast_room(room)
 
     async def handle_kick_player(room: Room, player, data: dict[str, Any]) -> None:
-        kicked_sid, kicked_token = room.kick_player(player.token, int(data.get("targetSeat")))
+        kicked_sid, kicked = room.kick_player(player.token, int(data.get("targetSeat")))
         # room.kick_player only removes the seat from the Room itself --
         # RoomManager's separate token -> room-code map is its own state,
         # so it's this handler's job to drop the stale entry, the same way
         # RoomManager.leave_room already does for a normal Leave.
-        room_manager.token_to_code.pop(kicked_token, None)
+        room_manager.token_to_code.pop(kicked.token, None)
+        # A kick is one host's subjective call, not inherently an abuse
+        # signal on its own (could be a griefer, could just be an AFK
+        # teammate) -- but logged with an IP, a jail can still watch for
+        # the pattern that *is* a real signal: the same IP getting kicked
+        # from several different rooms, not just once.
+        logger.warning(
+            "[socket] kicked ip=%s code=%s target=%s by=%s", kicked.ip, room.code, kicked.display_name, player.display_name
+        )
         await broadcast_room(room)
         if kicked_sid:
             # Tell them directly, while the connection still exists to tell
@@ -423,7 +434,22 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         await broadcast_room(room)
 
     async def handle_set_muted(room: Room, player, data: dict[str, Any]) -> None:
-        room.set_muted(player.token, int(data.get("targetSeat")), bool(data.get("muted")))
+        muted = bool(data.get("muted"))
+        target = room.set_muted(player.token, int(data.get("targetSeat")), muted)
+        # Same reasoning as the kick log line: one mute isn't necessarily
+        # abuse (could be a legitimate moderation call for an argumentative
+        # but otherwise fine player), but the same IP getting muted
+        # repeatedly across different rooms is a real pattern to watch for.
+        # Logs unmutes too (action=unmuted), purely for a complete audit
+        # trail -- nothing is expected to alert on that half.
+        logger.warning(
+            "[socket] %s ip=%s code=%s target=%s by=%s",
+            "muted" if muted else "unmuted",
+            target.ip,
+            room.code,
+            target.display_name,
+            player.display_name,
+        )
         await broadcast_room(room)
 
     @sio.event

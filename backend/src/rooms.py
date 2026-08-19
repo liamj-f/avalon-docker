@@ -50,6 +50,12 @@ class Player:
     # kick_player is no longer available (see there) -- silences chat
     # without touching the seat/role a dealt game depends on.
     muted: bool = False
+    # Set by socket_handlers.py on every room:create/join/rejoin (so a
+    # reconnect from a different network keeps this current, not stale from
+    # hours ago) -- purely for the kicked/muted log lines there to have an
+    # IP to report, same one the room:create/room:join logging already
+    # reads fresh off the connecting socket. Never sent to any client.
+    ip: str = "unknown"
 
 
 class Room:
@@ -160,20 +166,22 @@ class Room:
                 nxt.is_host = True
                 self.host_token = nxt.token
 
-    def kick_player(self, token: str, target_seat: int) -> tuple[str | None, str]:
+    def kick_player(self, token: str, target_seat: int) -> tuple[str | None, Player]:
         """Host-only removal of another player, lobby-only. Once a game has
         started, a seat can't be un-dealt without unraveling the whole
         game -- roles, knowledge, and vote history are all keyed off it --
         so this deliberately stops working the instant start_game succeeds.
         The host's mid-game moderation tool is set_muted instead, which
-        doesn't touch the seat at all. Returns (socket_id, token): the
+        doesn't touch the seat at all. Returns (socket_id, target): the
         target's current socket_id (if connected), so the caller can force-
         disconnect that live connection immediately rather than leaving them
         sitting in a lobby that no longer includes them until they next take
-        some action; and their token, so the caller can also drop it from
-        RoomManager.token_to_code -- this method only removes them from the
-        Room's own player list (self.remove_player), it has no reach into
-        that separate, RoomManager-owned mapping itself."""
+        some action; and the removed Player object itself (still fully
+        populated -- remove_player only drops it from self.players, it
+        doesn't touch the object), so the caller can log who/where this
+        was and drop the token from RoomManager.token_to_code -- this
+        method only removes them from the Room's own player list, it has
+        no reach into that separate, RoomManager-owned mapping itself."""
         if token != self.host_token:
             raise GameError("Only the host can remove a player.")
         if self.phase != "lobby":
@@ -185,15 +193,16 @@ class Room:
             raise GameError("You can't remove yourself -- use Leave instead.")
 
         sid = target.socket_id
-        target_token = target.token
-        self.remove_player(target_token)
-        return sid, target_token
+        self.remove_player(target.token)
+        return sid, target
 
-    def set_muted(self, token: str, target_seat: int, muted: bool) -> None:
+    def set_muted(self, token: str, target_seat: int, muted: bool) -> Player:
         """Host-only chat moderation. Available in any phase -- Chat.jsx
         renders in both the lobby and mid-game, and mute state persists
         across a game starting/ending (it lives on the Player, not reset by
-        reset_to_lobby) -- unlike kick_player, which is lobby-only."""
+        reset_to_lobby) -- unlike kick_player, which is lobby-only. Returns
+        the target Player (with .muted already updated) so the caller can
+        log who/where this was, same reasoning as kick_player's return."""
         if token != self.host_token:
             raise GameError("Only the host can mute a player.")
         target = next((p for p in self.player_list if p.seat_index == target_seat), None)
@@ -202,6 +211,7 @@ class Room:
         if target.token == token:
             raise GameError("You can't mute yourself.")
         target.muted = muted
+        return target
 
     def is_empty(self) -> bool:
         if not self.players:
