@@ -507,10 +507,27 @@ button {
 
 .lobby-grid {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 320px 1fr 320px;
+  align-items: stretch;
   gap: 20px;
   width: 100%;
-  max-width: 960px;
+  max-width: 1320px;
+}
+
+/* Chat's own root already carries full card styling (background/border/
+   radius/padding -- see .chat-box), so it sits directly as this grid's
+   third column rather than inside another .card wrapper. Grid's default
+   stretch alignment already makes it match the row's height (i.e. the
+   Roles column's, since that's normally the tallest); height:auto here
+   just lets that happen instead of the game sidebar's fixed 420px winning.
+   Needs the compound .chat-box.lobby-chat-box selector, not just
+   .lobby-chat-box alone -- same specificity as plain .chat-box, so without
+   the extra class here .chat-box's own height:420px (declared later in
+   this file) would win the cascade regardless of which class is "more
+   specific to the reader's eye". */
+.chat-box.lobby-chat-box {
+  height: auto;
+  min-height: 0;
 }
 
 .lobby-code-row {
@@ -551,6 +568,28 @@ button {
   padding: 8px 10px;
   background: var(--bg-alt);
   border-radius: 8px;
+}
+
+/* .player-row-main and .player-row-actions are each one flex item inside
+   .player-row -- .player-row-actions has flex-basis: 100%, so in a
+   wrapping flex container that forces it onto its own line below the
+   name/badges every time, at any width, rather than only wrapping once
+   there's literally no room left (which could still squeeze a long name
+   onto multiple cramped lines beside the buttons). */
+.player-row-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.player-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-basis: 100%;
 }
 
 .player-disconnected {
@@ -642,6 +681,7 @@ button {
 
 .role-toggle-main:disabled {
   cursor: default;
+  opacity: 0.5;
 }
 
 .role-toggle p {
@@ -1622,5 +1662,14 @@ button.mission-pip:hover {
   .lobby-grid,
   .game-layout {
     grid-template-columns: 1fr;
+  }
+
+  /* Stacked single-column now (Players, then Roles, then Chat, in that DOM
+     order -- chat ends up underneath everything, as intended). "Full
+     height matching the Roles column" stops being a meaningful idea once
+     there's no side-by-side row left to match, so this reverts to a fixed
+     height instead of stretching to whatever auto-row-height it'd now get. */
+  .chat-box.lobby-chat-box {
+    height: 420px;
   }
 }

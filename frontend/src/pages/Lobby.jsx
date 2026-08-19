@@ -1,6 +1,6 @@
 import React from 'react';
 import { useGame } from '../store.jsx';
-import { ROLE_TOGGLES, EXTENSION_TOGGLES, validateSettingsClient } from '../gameData.js';
+import { ROLE_TOGGLES, EXTENSION_TOGGLES, validateSettingsClient, togglingWouldExceedSlots } from '../gameData.js';
 import { PlayerShield } from '../components/PlayerAvatar.jsx';
 import Chat from '../components/Chat.jsx';
 
@@ -51,6 +51,11 @@ export default function Lobby() {
     items.map((r) => {
       const tally = rolePreferenceTally[r.key] || { count: 0, you: false };
       const active = !!settings[r.key];
+      // Proactively block turning this on once there's no room left for it
+      // -- Tristan & Iseult and the Lancelot pair each need 2 real seats,
+      // not 1, already accounted for inside togglingWouldExceedSlots.
+      // Never blocks turning an already-enabled one back off.
+      const noSlotsLeft = !active && togglingWouldExceedSlots(players.length, settings, r.key);
       return (
         <div key={r.key} className={`role-toggle role-toggle-${r.team || 'neutral'} ${active ? 'active' : ''}`}>
           <button
@@ -58,7 +63,8 @@ export default function Lobby() {
             className="role-toggle-main"
             aria-pressed={active}
             onClick={() => toggleSetting(r.key)}
-            disabled={!you?.isHost}
+            disabled={!you?.isHost || noSlotsLeft}
+            title={noSlotsLeft ? `Not enough player slots left at ${players.length} players to add this.` : undefined}
           >
             <div className="role-toggle-head">
               <span className="role-toggle-name">{r.name}</span>
@@ -101,34 +107,39 @@ export default function Lobby() {
         <ul className="player-list">
           {players.map((p) => (
             <li key={p.seat} className={`player-row ${p.connected ? '' : 'player-disconnected'}`}>
-              <span className="player-shield" aria-hidden="true">
-                <PlayerShield seat={p.seat} size={28} dim={!p.connected} />
+              <span className="player-row-main">
+                <span className="player-shield" aria-hidden="true">
+                  <PlayerShield seat={p.seat} size={28} dim={!p.connected} />
+                </span>
+                <span className="player-dot" data-connected={p.connected} />
+                <span className="player-name">{p.displayName}</span>
+                {p.isHost && <span className="badge">Host</span>}
+                {p.seat === you?.seat && <span className="badge badge-you">You</span>}
+                {!p.connected && <span className="badge badge-warn">offline</span>}
+                {p.muted && <span className="badge badge-warn">muted</span>}
               </span>
-              <span className="player-dot" data-connected={p.connected} />
-              <span className="player-name">{p.displayName}</span>
-              {p.isHost && <span className="badge">Host</span>}
-              {p.seat === you?.seat && <span className="badge badge-you">You</span>}
-              {!p.connected && <span className="badge badge-warn">offline</span>}
-              {p.muted && <span className="badge badge-warn">muted</span>}
-              {you?.isHost && p.seat !== you.seat && p.connected && (
-                <button type="button" className="btn btn-ghost btn-tiny" onClick={() => transferHost(p.seat)}>
-                  Make host
-                </button>
-              )}
               {you?.isHost && p.seat !== you.seat && (
-                <button
-                  type="button"
-                  className={`btn btn-ghost btn-tiny ${p.muted ? '' : 'btn-danger-tiny'}`}
-                  onClick={() => toggleMuted(p)}
-                  title={p.muted ? 'Allow them to send chat messages again' : "Stop their messages from reaching the table"}
-                >
-                  {p.muted ? 'Unmute' : 'Mute'}
-                </button>
-              )}
-              {you?.isHost && p.seat !== you.seat && (
-                <button type="button" className="btn btn-ghost btn-tiny btn-danger-tiny" onClick={() => kick(p)}>
-                  Kick
-                </button>
+                // Own row below the name/badges (see .player-row-actions) --
+                // three possible buttons here previously fought the name for
+                // horizontal space in the same line, squeezing/wrapping it.
+                <span className="player-row-actions">
+                  {p.connected && (
+                    <button type="button" className="btn btn-ghost btn-tiny" onClick={() => transferHost(p.seat)}>
+                      Make host
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={`btn btn-ghost btn-tiny ${p.muted ? '' : 'btn-danger-tiny'}`}
+                    onClick={() => toggleMuted(p)}
+                    title={p.muted ? 'Allow them to send chat messages again' : "Stop their messages from reaching the table"}
+                  >
+                    {p.muted ? 'Unmute' : 'Mute'}
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-tiny btn-danger-tiny" onClick={() => kick(p)}>
+                    Kick
+                  </button>
+                </span>
               )}
             </li>
           ))}
@@ -183,9 +194,7 @@ export default function Lobby() {
         </button>
       </div>
 
-      <div className="card">
-        <Chat chat={room.chat} muted={you?.muted} />
-      </div>
+      <Chat chat={room.chat} muted={you?.muted} className="lobby-chat-box" />
     </div>
   );
 }

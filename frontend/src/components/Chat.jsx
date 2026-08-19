@@ -1,7 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useGame } from '../store.jsx';
 
-export default function Chat({ chat, muted }) {
+// className is an optional extra class on the root .chat-box -- lets a
+// caller override sizing (e.g. Lobby.jsx's full-height desktop placement,
+// vs. the game sidebar's fixed height) without this component needing to
+// know why.
+export default function Chat({ chat, muted, className }) {
   const { sendChat } = useGame();
   const [message, setMessage] = useState('');
   const listRef = useRef(null);
@@ -19,7 +23,7 @@ export default function Chat({ chat, muted }) {
   };
 
   return (
-    <div className="chat-box">
+    <div className={`chat-box ${className || ''}`.trim()}>
       <h3 className="section-title">Table Talk</h3>
       <div className="chat-list" ref={listRef}>
         {chat.length === 0 && <p className="hint">No messages yet.</p>}

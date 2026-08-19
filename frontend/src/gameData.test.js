@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateSettingsClient } from './gameData.js';
+import { validateSettingsClient, togglingWouldExceedSlots } from './gameData.js';
 
 // validateSettingsClient mirrors backend/src/game/roles.py's real
 // validation purely so the lobby can warn a host before they hit "Start" --
@@ -75,5 +75,57 @@ describe('validateSettingsClient', () => {
       assassin: true,
     });
     expect(errors).toEqual([]);
+  });
+});
+
+// The lobby's per-toggle proactive cap: same slot math as
+// validateSettingsClient (in fact shares its implementation via
+// specialSlotCounts), applied one hypothetical toggle at a time instead of
+// after the fact to a whole settings object.
+describe('togglingWouldExceedSlots', () => {
+  it('blocks turning on an Evil special once the Evil slots are full', () => {
+    // 5 players -> 2 Evil slots, already claimed by Mordred + Morgana.
+    const settings = { merlin: true, mordred: true, morgana: true, percival: true };
+    expect(togglingWouldExceedSlots(5, settings, 'assassin')).toBe(true);
+  });
+
+  it('allows turning on an Evil special while a slot is still free', () => {
+    const settings = { merlin: true, mordred: true };
+    expect(togglingWouldExceedSlots(5, settings, 'assassin')).toBe(false);
+  });
+
+  it('never blocks turning an already-enabled toggle back off', () => {
+    // Already claims both Evil slots itself -- but it's already on, so
+    // this must be false regardless (toggling it off only frees a slot).
+    const settings = { merlin: true, mordred: true, morgana: true };
+    expect(togglingWouldExceedSlots(5, settings, 'mordred')).toBe(false);
+  });
+
+  it('weighs Tristan & Iseult as 2 real seats, not 1', () => {
+    // 5 players -> 3 Good slots. Merlin + Percival already claims 2 of
+    // them, leaving only 1 free -- not enough for a 2-seat pair.
+    const oneFree = { merlin: true, percival: true };
+    expect(togglingWouldExceedSlots(5, oneFree, 'tristanIseult')).toBe(true);
+    // With only Merlin claimed, 2 slots are free -- exactly enough.
+    const twoFree = { merlin: true };
+    expect(togglingWouldExceedSlots(5, twoFree, 'tristanIseult')).toBe(false);
+  });
+
+  it('blocks the Lancelot pair if either team is out of room, since it needs one of each', () => {
+    // 5 players -> 3 Good / 2 Evil slots. Good is full (3), Evil has room.
+    const goodFull = { merlin: true, percival: true, gawain: true };
+    expect(togglingWouldExceedSlots(5, goodFull, 'lancelotPair')).toBe(true);
+
+    // Evil is full (2), Good has room.
+    const evilFull = { merlin: true, mordred: true, morgana: true, percival: true };
+    expect(togglingWouldExceedSlots(5, evilFull, 'lancelotPair')).toBe(true);
+
+    // Both teams have room for one more each.
+    const roomForBoth = { merlin: true, mordred: true };
+    expect(togglingWouldExceedSlots(5, roomForBoth, 'lancelotPair')).toBe(false);
+  });
+
+  it('never blocks anything for an unsupported player count', () => {
+    expect(togglingWouldExceedSlots(4, {}, 'merlin')).toBe(false);
   });
 });

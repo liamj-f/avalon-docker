@@ -46,15 +46,23 @@ describe('CharacterFooter', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('renders nothing during the lobby phase, even with an active roster', () => {
+    // The Roles panel already shows the same info, more fully, while
+    // still in the lobby -- a compact footer duplicating it there is
+    // clutter, not a reference. Only shown once phase is 'in_game'.
+    const { container } = render(<CharacterFooter room={{ phase: 'lobby', settings: baseSettings }} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it('renders a button per enabled character and no description by default', () => {
-    render(<CharacterFooter room={{ settings: baseSettings }} />);
+    render(<CharacterFooter room={{ phase: 'in_game', settings: baseSettings }} />);
     expect(screen.getByRole('button', { name: 'Merlin' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Assassin' })).toBeInTheDocument();
     expect(screen.queryByText(/Sees all Evil/)).not.toBeInTheDocument();
   });
 
   it('shows the description on click, and hides it again on a second click', () => {
-    render(<CharacterFooter room={{ settings: baseSettings }} />);
+    render(<CharacterFooter room={{ phase: 'in_game', settings: baseSettings }} />);
     const merlinButton = screen.getByRole('button', { name: 'Merlin' });
 
     fireEvent.click(merlinButton);
@@ -67,7 +75,7 @@ describe('CharacterFooter', () => {
   });
 
   it('only shows one description at a time', () => {
-    render(<CharacterFooter room={{ settings: baseSettings }} />);
+    render(<CharacterFooter room={{ phase: 'in_game', settings: baseSettings }} />);
     fireEvent.click(screen.getByRole('button', { name: 'Merlin' }));
     expect(screen.getByText(/Sees all Evil/)).toBeInTheDocument();
 
