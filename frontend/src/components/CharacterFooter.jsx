@@ -20,8 +20,15 @@ export function activeRoster(room) {
 // be static, unclickable text, which meant actually checking what e.g.
 // Agravain or Guinevere does required leaving to check the rules. One
 // entry open at a time; pressing the already-open one again collapses it.
+//
+// Only shown once a game is actually underway. In the lobby, the Roles
+// panel already shows every enabled character with its full description
+// visible at all times (plus the vote tally and the host's own toggle
+// controls) -- a compact, click-to-expand duplicate of that same
+// information in the footer would be redundant there, not useful the way
+// it is mid-game once the Roles panel is gone.
 export default function CharacterFooter({ room }) {
-  const roster = activeRoster(room);
+  const roster = room?.phase === 'in_game' ? activeRoster(room) : null;
   // roster is a fresh array every render, so this keys off a stable
   // signature of which characters are actually active rather than array
   // identity -- otherwise the effect below would fire on every render,

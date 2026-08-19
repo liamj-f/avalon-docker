@@ -129,6 +129,28 @@ export const QUEST_FLAVOR = [
   { name: 'The Isle of Avalon', blurb: 'The final crossing — where the truth is finally laid bare.', theme: 'isle-of-avalon' },
 ];
 
+// How many of a player-count's Good/Evil slots are claimed by the
+// currently-enabled special roles. Tristan & Iseult and the Good & Evil
+// Lancelot pair each represent two real seats, not one -- weighted
+// accordingly here so every caller (the post-hoc error message below, and
+// the lobby's proactive per-toggle cap) agrees on the same count instead
+// of two formulas quietly drifting apart.
+export function specialSlotCounts(settings) {
+  const evilSpecial =
+    ['mordred', 'morgana', 'oberon', 'assassin', 'agravain'].filter((k) => settings[k]).length +
+    (settings.lancelotPair ? 1 : 0);
+  const goodSpecial =
+    (settings.tristanIseult ? 2 : 0) +
+    (settings.merlin ? 1 : 0) +
+    (settings.percival ? 1 : 0) +
+    (settings.arthur ? 1 : 0) +
+    (settings.gawain ? 1 : 0) +
+    (settings.lancelot ? 1 : 0) +
+    (settings.lancelotPair ? 1 : 0) +
+    (settings.guinevere ? 1 : 0);
+  return { evilSpecial, goodSpecial };
+}
+
 export function validateSettingsClient(playerCount, settings) {
   const errors = [];
   const cfg = MISSION_CONFIG[playerCount];
@@ -146,18 +168,23 @@ export function validateSettingsClient(playerCount, settings) {
   if (settings.guinevere && !settings.lancelotPair) errors.push('Guinevere requires the Good & Evil Lancelot pair to be in play.');
   if (settings.lancelot && settings.lancelotPair) errors.push('Lancelot (solo) and the Lancelot pair cannot both be in play — pick one.');
 
-  const evilSpecial = ['mordred', 'morgana', 'oberon', 'assassin', 'agravain'].filter((k) => settings[k]).length + (settings.lancelotPair ? 1 : 0);
-  const goodSpecial =
-    (settings.tristanIseult ? 2 : 0) +
-    (settings.merlin ? 1 : 0) +
-    (settings.percival ? 1 : 0) +
-    (settings.arthur ? 1 : 0) +
-    (settings.gawain ? 1 : 0) +
-    (settings.lancelot ? 1 : 0) +
-    (settings.lancelotPair ? 1 : 0) +
-    (settings.guinevere ? 1 : 0);
+  const { evilSpecial, goodSpecial } = specialSlotCounts(settings);
   if (evilSpecial > cfg.evil) errors.push(`Too many Evil special roles for ${cfg.evil} Evil slots at ${playerCount} players.`);
   if (goodSpecial > cfg.good) errors.push(`Too many Good special roles for ${cfg.good} Good slots at ${playerCount} players.`);
 
   return errors;
+}
+
+// Would enabling this one currently-off toggle, on its own, push either
+// team's special-role count past what this player count has slots for?
+// Used to proactively greyed out the toggle itself in the lobby, rather
+// than only surfacing the problem after the fact via
+// validateSettingsClient's error list once the host has already picked an
+// over-count combination. Already-enabled toggles are never blocked by
+// this (turning one off can only ever free up slots, never use more).
+export function togglingWouldExceedSlots(playerCount, settings, key) {
+  const cfg = MISSION_CONFIG[playerCount];
+  if (!cfg || settings[key]) return false;
+  const { evilSpecial, goodSpecial } = specialSlotCounts({ ...settings, [key]: true });
+  return evilSpecial > cfg.evil || goodSpecial > cfg.good;
 }
