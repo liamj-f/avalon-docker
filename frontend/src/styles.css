@@ -508,7 +508,7 @@ button {
 .lobby-grid {
   display: grid;
   grid-template-columns: 320px 1fr 320px;
-  align-items: stretch;
+  align-items: start;
   gap: 20px;
   width: 100%;
   max-width: 1320px;
@@ -516,18 +516,30 @@ button {
 
 /* Chat's own root already carries full card styling (background/border/
    radius/padding -- see .chat-box), so it sits directly as this grid's
-   third column rather than inside another .card wrapper. Grid's default
-   stretch alignment already makes it match the row's height (i.e. the
-   Roles column's, since that's normally the tallest); height:auto here
-   just lets that happen instead of the game sidebar's fixed 420px winning.
-   Needs the compound .chat-box.lobby-chat-box selector, not just
-   .lobby-chat-box alone -- same specificity as plain .chat-box, so without
-   the extra class here .chat-box's own height:420px (declared later in
-   this file) would win the cascade regardless of which class is "more
-   specific to the reader's eye". */
+   third column rather than inside another .card wrapper.
+
+   Stretching Chat to match the Roles column's full content height (an
+   earlier version of this) turned out badly in practice: Roles easily
+   runs 1200px+ tall, so a chat box that tall pushes its own message
+   composer that far down the page too -- reaching it meant scrolling all
+   the way down past Roles first, exactly backwards from what a chat
+   panel is for. This instead caps Chat at a sensible viewport-relative
+   height (scrolling its own message list internally, same as it always
+   has) and makes it position:sticky, so it stays on screen -- composer
+   included -- while the much taller Roles column scrolls past it, rather
+   than scrolling away with the page or forcing a scroll to reach it.
+   `top` clears .app-header's own sticky height plus a little breathing
+   room. Needs the compound .chat-box.lobby-chat-box selector, not just
+   .lobby-chat-box alone -- same specificity as plain .chat-box, so
+   without the extra class here .chat-box's own height:420px (declared
+   later in this file) would win the cascade regardless of which class is
+   "more specific to the reader's eye". */
 .chat-box.lobby-chat-box {
   height: auto;
   min-height: 0;
+  position: sticky;
+  top: 84px;
+  max-height: calc(100vh - 104px);
 }
 
 .lobby-code-row {
@@ -570,23 +582,27 @@ button {
   border-radius: 8px;
 }
 
-/* .player-row-main and .player-row-actions are each one flex item inside
-   .player-row -- .player-row-actions has flex-basis: 100%, so in a
-   wrapping flex container that forces it onto its own line below the
-   name/badges every time, at any width, rather than only wrapping once
-   there's literally no room left (which could still squeeze a long name
-   onto multiple cramped lines beside the buttons). */
+/* .player-row-main and .player-row-meta are each one flex item inside
+   .player-row -- .player-row-meta has flex-basis: 100%, so in a wrapping
+   flex container that forces it onto its own line below the name every
+   time, at any width, rather than only wrapping once there's literally no
+   room left (which could still squeeze a long name onto multiple cramped
+   lines beside its own badges, let alone up to three action buttons on
+   top of that). .player-row-main is name-only now for exactly that reason
+   -- badges (Host/You/offline/muted) moved into .player-row-meta too,
+   since even just Host+You together on the host's own row (which has no
+   action buttons to have already forced a wrap) had the same problem. */
 .player-row-main {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 8px;
   flex: 1;
   min-width: 0;
 }
 
-.player-row-actions {
+.player-row-meta {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 8px;
   flex-basis: 100%;
@@ -1665,11 +1681,15 @@ button.mission-pip:hover {
   }
 
   /* Stacked single-column now (Players, then Roles, then Chat, in that DOM
-     order -- chat ends up underneath everything, as intended). "Full
-     height matching the Roles column" stops being a meaningful idea once
-     there's no side-by-side row left to match, so this reverts to a fixed
-     height instead of stretching to whatever auto-row-height it'd now get. */
+     order -- chat ends up underneath everything, as intended). Sticky
+     positioning is for staying on screen *beside* a much taller column;
+     stacked, there's no side-by-side column left for it to float past, so
+     a sticky/capped chat here would just pin itself over page content
+     as you scroll -- a normal static block with the original fixed
+     height reads better on a small screen. */
   .chat-box.lobby-chat-box {
+    position: static;
     height: 420px;
+    max-height: none;
   }
 }

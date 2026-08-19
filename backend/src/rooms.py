@@ -160,17 +160,20 @@ class Room:
                 nxt.is_host = True
                 self.host_token = nxt.token
 
-    def kick_player(self, token: str, target_seat: int) -> str | None:
+    def kick_player(self, token: str, target_seat: int) -> tuple[str | None, str]:
         """Host-only removal of another player, lobby-only. Once a game has
         started, a seat can't be un-dealt without unraveling the whole
         game -- roles, knowledge, and vote history are all keyed off it --
         so this deliberately stops working the instant start_game succeeds.
         The host's mid-game moderation tool is set_muted instead, which
-        doesn't touch the seat at all. Returns the target's current
-        socket_id (if connected) so the caller can force-disconnect that
-        live connection immediately, rather than leaving them sitting in a
-        lobby that no longer includes them until they next take some
-        action."""
+        doesn't touch the seat at all. Returns (socket_id, token): the
+        target's current socket_id (if connected), so the caller can force-
+        disconnect that live connection immediately rather than leaving them
+        sitting in a lobby that no longer includes them until they next take
+        some action; and their token, so the caller can also drop it from
+        RoomManager.token_to_code -- this method only removes them from the
+        Room's own player list (self.remove_player), it has no reach into
+        that separate, RoomManager-owned mapping itself."""
         if token != self.host_token:
             raise GameError("Only the host can remove a player.")
         if self.phase != "lobby":
@@ -182,8 +185,9 @@ class Room:
             raise GameError("You can't remove yourself -- use Leave instead.")
 
         sid = target.socket_id
-        self.remove_player(target.token)
-        return sid
+        target_token = target.token
+        self.remove_player(target_token)
+        return sid, target_token
 
     def set_muted(self, token: str, target_seat: int, muted: bool) -> None:
         """Host-only chat moderation. Available in any phase -- Chat.jsx

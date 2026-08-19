@@ -113,34 +113,38 @@ export default function Lobby() {
                 </span>
                 <span className="player-dot" data-connected={p.connected} />
                 <span className="player-name">{p.displayName}</span>
+              </span>
+              {/* Own line below the name (see .player-row-meta) -- badges
+                  alone already squeezed a long name on the host's own row
+                  (Host + You together, with no action buttons to have
+                  already forced a wrap there), and up to three buttons on
+                  top of that on every other row made it worse. */}
+              <span className="player-row-meta">
                 {p.isHost && <span className="badge">Host</span>}
                 {p.seat === you?.seat && <span className="badge badge-you">You</span>}
                 {!p.connected && <span className="badge badge-warn">offline</span>}
                 {p.muted && <span className="badge badge-warn">muted</span>}
-              </span>
-              {you?.isHost && p.seat !== you.seat && (
-                // Own row below the name/badges (see .player-row-actions) --
-                // three possible buttons here previously fought the name for
-                // horizontal space in the same line, squeezing/wrapping it.
-                <span className="player-row-actions">
-                  {p.connected && (
-                    <button type="button" className="btn btn-ghost btn-tiny" onClick={() => transferHost(p.seat)}>
-                      Make host
+                {you?.isHost && p.seat !== you.seat && (
+                  <>
+                    {p.connected && (
+                      <button type="button" className="btn btn-ghost btn-tiny" onClick={() => transferHost(p.seat)}>
+                        Make host
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className={`btn btn-ghost btn-tiny ${p.muted ? '' : 'btn-danger-tiny'}`}
+                      onClick={() => toggleMuted(p)}
+                      title={p.muted ? 'Allow them to send chat messages again' : "Stop their messages from reaching the table"}
+                    >
+                      {p.muted ? 'Unmute' : 'Mute'}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    className={`btn btn-ghost btn-tiny ${p.muted ? '' : 'btn-danger-tiny'}`}
-                    onClick={() => toggleMuted(p)}
-                    title={p.muted ? 'Allow them to send chat messages again' : "Stop their messages from reaching the table"}
-                  >
-                    {p.muted ? 'Unmute' : 'Mute'}
-                  </button>
-                  <button type="button" className="btn btn-ghost btn-tiny btn-danger-tiny" onClick={() => kick(p)}>
-                    Kick
-                  </button>
-                </span>
-              )}
+                    <button type="button" className="btn btn-ghost btn-tiny btn-danger-tiny" onClick={() => kick(p)}>
+                      Kick
+                    </button>
+                  </>
+                )}
+              </span>
             </li>
           ))}
         </ul>
