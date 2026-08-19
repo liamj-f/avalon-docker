@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useReducer, useRef } from 'react';
 import { socket } from './socket';
 
-const TOKEN_KEY = 'avalon.token';
+export const TOKEN_KEY = 'avalon.token'; // exported so tests can check localStorage against the same key
 
 const GameContext = createContext(null);
 
@@ -12,7 +12,8 @@ const initialState = {
   error: null,
 };
 
-function reducer(state, action) {
+// Exported for testing -- a pure function, no reason not to.
+export function reducer(state, action) {
   switch (action.type) {
     case 'CONNECTED':
       return { ...state, connected: true };
@@ -30,6 +31,16 @@ function reducer(state, action) {
     case 'LEFT':
       localStorage.removeItem(TOKEN_KEY);
       return { ...state, token: null, room: null };
+    case 'SESSION_INVALID':
+      // Distinct from a plain 'error' toast on purpose -- this fires when
+      // room:rejoin itself fails (most commonly: the host kicked this
+      // player while they were disconnected), meaning there's no real room
+      // left to show. Leaving `room` in place and only toasting a message
+      // over it would leave a frozen, stale lobby/game view on screen with
+      // nothing actually working -- reset all the way back to Home, same
+      // as LEFT, with the reason carried along as the toast.
+      localStorage.removeItem(TOKEN_KEY);
+      return { ...state, token: null, room: null, error: action.message };
     default:
       return state;
   }
@@ -47,16 +58,36 @@ export function GameProvider({ children }) {
         socket.emit('room:rejoin', { token: tokenRef.current });
       }
     };
-    const onDisconnect = () => dispatch({ type: 'DISCONNECTED' });
+    const onDisconnect = (reason) => {
+      dispatch({ type: 'DISCONNECTED' });
+      if (reason === 'io server disconnect') {
+        // Socket.IO's own documented behavior: a *server*-initiated
+        // disconnect (e.g. sio.disconnect() after a kick) is the one
+        // disconnect reason the client never auto-reconnects from on its
+        // own, unlike every other reason (network drop, etc.) -- so
+        // without this, someone kicked back to Home would be stuck unable
+        // to create/join a new room at all until they manually refreshed
+        // the page. This re-arms a normal connection attempt explicitly.
+        socket.connect();
+      }
+    };
     const onJoined = (payload) => dispatch({ type: 'JOINED', token: payload.token });
     const onRoomState = (room) => dispatch({ type: 'ROOM_STATE', room });
     const onError = (payload) => dispatch({ type: 'ERROR', message: payload.message });
+    const onRejoinFailed = (payload) => dispatch({ type: 'SESSION_INVALID', message: payload.message });
+    // Delivered directly, over the still-open connection, right before the
+    // server closes it (see the design note on the emit itself,
+    // handle_kick_player) -- the disconnect that follows is what
+    // onDisconnect's reason check above is for.
+    const onKicked = (payload) => dispatch({ type: 'SESSION_INVALID', message: payload.message });
 
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
     socket.on('room:joined', onJoined);
     socket.on('room:state', onRoomState);
     socket.on('error', onError);
+    socket.on('room:rejoinFailed', onRejoinFailed);
+    socket.on('room:kicked', onKicked);
 
     if (socket.connected) onConnect();
 
@@ -66,6 +97,8 @@ export function GameProvider({ children }) {
       socket.off('room:joined', onJoined);
       socket.off('room:state', onRoomState);
       socket.off('error', onError);
+      socket.off('room:rejoinFailed', onRejoinFailed);
+      socket.off('room:kicked', onKicked);
     };
   }, []);
 

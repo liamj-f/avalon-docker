@@ -178,6 +178,24 @@ def test_kick_player_blocked_once_game_started():
         room.kick_player(room.host_token, target_seat)
 
 
+def test_kick_player_returns_socket_id_and_token_and_removes_the_seat():
+    # The (sid, token) pair matters -- socket_handlers.py's
+    # handle_kick_player needs the token to also clean up RoomManager's own
+    # token -> room-code map (a separate piece of state this Room-level
+    # method has no reach into), not just the sid to force-disconnect them.
+    room = Room("ABCDE")
+    _add_players(room, 2)
+    target = next(p for p in room.players.values() if p.token != room.host_token)
+    target.socket_id = "sid-123"
+    target_token = target.token
+
+    sid, token = room.kick_player(room.host_token, target.seat_index)
+
+    assert sid == "sid-123"
+    assert token == target_token
+    assert target_token not in room.players
+
+
 def test_chat_rate_limit_blocks_after_threshold():
     room = Room("ABCDE")
     _add_players(room, 1)

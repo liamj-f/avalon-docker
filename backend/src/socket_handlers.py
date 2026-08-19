@@ -105,9 +105,15 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         async with broadcast_locks[room.code]:
             await do_broadcast(room)
 
-    async def fail(sid: str, err: Exception) -> None:
+    def _log_if_unexpected(err: Exception, context: str) -> None:
+        # GameError and DB-raised errors are expected, user-facing outcomes
+        # (bad input, wrong phase, ...) -- anything else is a real bug and
+        # worth the full traceback, not just the toast text.
         if not isinstance(err, GameError) and not getattr(err, "message", None):
-            logger.exception("[socket] unexpected error", exc_info=err)
+            logger.exception("[socket] unexpected error (%s)", context, exc_info=err)
+
+    async def fail(sid: str, err: Exception) -> None:
+        _log_if_unexpected(err, "generic")
         await sio.emit("error", {"message": _error_message(err)}, to=sid)
 
     async def current_token(sid: str) -> str | None:
@@ -211,7 +217,17 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
             await sio.emit("room:joined", {"token": token, "code": room.code}, to=sid)
             await broadcast_room(room)
         except Exception as err:  # noqa: BLE001
-            await fail(sid, err)
+            # Deliberately not the generic fail()/'error' path every other
+            # handler uses: a failed rejoin means the client is still
+            # showing a stale, frozen room (chat, roster, everything) for a
+            # session that no longer exists server-side -- most commonly
+            # because the host kicked this player while they were
+            # disconnected. A toast alone would leave that stale UI on
+            # screen with no visible explanation why nothing works anymore;
+            # this dedicated event tells the frontend to reset to the Home
+            # screen instead, carrying the reason along to show there.
+            _log_if_unexpected(err, "room:rejoin")
+            await sio.emit("room:rejoinFailed", {"message": _error_message(err)}, to=sid)
 
     async def handle_update_settings(room: Room, player, data: dict[str, Any]) -> None:
         room.update_settings(player.token, data.get("settings") or {})
@@ -239,9 +255,27 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         await broadcast_room(room)
 
     async def handle_kick_player(room: Room, player, data: dict[str, Any]) -> None:
-        kicked_sid = room.kick_player(player.token, int(data.get("targetSeat")))
+        kicked_sid, kicked_token = room.kick_player(player.token, int(data.get("targetSeat")))
+        # room.kick_player only removes the seat from the Room itself --
+        # RoomManager's separate token -> room-code map is its own state,
+        # so it's this handler's job to drop the stale entry, the same way
+        # RoomManager.leave_room already does for a normal Leave.
+        room_manager.token_to_code.pop(kicked_token, None)
         await broadcast_room(room)
         if kicked_sid:
+            # Tell them directly, while the connection still exists to tell
+            # them on -- sio.disconnect() below is a *server*-initiated
+            # disconnect, and by Socket.IO's own protocol, a client never
+            # auto-reconnects after one of those (unlike a plain network
+            # drop, which it does retry). That's deliberate upstream
+            # behavior for exactly this kind of case, not a bug to work
+            # around, but it does mean the usual reconnect -> room:rejoin
+            # path (see handle_room_rejoin's room:rejoinFailed, which still
+            # covers a kick that lands while already disconnected) never
+            # gets a chance to run for a kicked player who was live when it
+            # happened -- nothing will ever trigger it. This is the only
+            # way they find out at all in that case.
+            await sio.emit("room:kicked", {"message": "You were removed from the room by the host."}, to=kicked_sid)
             # Force the live connection closed rather than waiting for it to
             # notice on its own -- otherwise a kicked-but-still-connected
             # player just sits in a lobby that no longer includes them until
