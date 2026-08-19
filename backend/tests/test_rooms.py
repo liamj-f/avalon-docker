@@ -169,6 +169,25 @@ def test_host_cannot_mute_self():
         room.set_muted(room.host_token, host_seat, True)
 
 
+def test_set_muted_returns_the_target_with_muted_state_already_updated():
+    # socket_handlers.py's handle_set_muted logs the target's ip/
+    # display_name on every mute/unmute -- needs the Player back, not just
+    # a bare None, to have anything to log.
+    room = Room("ABCDE")
+    _add_players(room, 2)
+    target = next(p for p in room.players.values() if p.token != room.host_token)
+    target.ip = "203.0.113.5"
+    target_seat = target.seat_index
+
+    muted = room.set_muted(room.host_token, target_seat, True)
+    assert muted.muted is True
+    assert muted.ip == "203.0.113.5"
+    assert muted.token == target.token
+
+    unmuted = room.set_muted(room.host_token, target_seat, False)
+    assert unmuted.muted is False
+
+
 def test_kick_player_blocked_once_game_started():
     room = Room("ABCDE")
     _add_players(room, 2)
@@ -178,21 +197,27 @@ def test_kick_player_blocked_once_game_started():
         room.kick_player(room.host_token, target_seat)
 
 
-def test_kick_player_returns_socket_id_and_token_and_removes_the_seat():
-    # The (sid, token) pair matters -- socket_handlers.py's
-    # handle_kick_player needs the token to also clean up RoomManager's own
-    # token -> room-code map (a separate piece of state this Room-level
-    # method has no reach into), not just the sid to force-disconnect them.
+def test_kick_player_returns_socket_id_and_player_and_removes_the_seat():
+    # The (sid, target) pair matters -- socket_handlers.py's
+    # handle_kick_player needs the target's token to also clean up
+    # RoomManager's own token -> room-code map (a separate piece of state
+    # this Room-level method has no reach into), and their ip/display_name
+    # to log the kick -- not just the sid to force-disconnect them. The
+    # returned Player stays fully populated even though it's already been
+    # removed from the room by the time it's returned.
     room = Room("ABCDE")
     _add_players(room, 2)
-    target = next(p for p in room.players.values() if p.token != room.host_token)
-    target.socket_id = "sid-123"
-    target_token = target.token
+    target_before = next(p for p in room.players.values() if p.token != room.host_token)
+    target_before.socket_id = "sid-123"
+    target_before.ip = "203.0.113.5"
+    target_token = target_before.token
 
-    sid, token = room.kick_player(room.host_token, target.seat_index)
+    sid, target = room.kick_player(room.host_token, target_before.seat_index)
 
     assert sid == "sid-123"
-    assert token == target_token
+    assert target.token == target_token
+    assert target.ip == "203.0.113.5"
+    assert target.display_name == target_before.display_name
     assert target_token not in room.players
 
 
