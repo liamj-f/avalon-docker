@@ -39,7 +39,8 @@ of truth for every game in progress — not just a history log.
 - **Reconnect-friendly**: your seat is tied to a token stored in the browser,
   not the socket connection, so a refresh or dropped connection doesn't kick
   you from the game.
-- **Table chat** alongside the game.
+- **Table chat**, available in the lobby as well as during the game — same
+  history, same host mute/unmute moderation and flood protection in both.
 - **Installable PWA**: add it to your phone/desktop home screen with its own
   icon and window, no browser chrome. Purely an app-shell/installability
   layer — see the design note below for why this can't and doesn't touch

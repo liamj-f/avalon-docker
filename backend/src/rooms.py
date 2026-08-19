@@ -186,9 +186,10 @@ class Room:
         return sid
 
     def set_muted(self, token: str, target_seat: int, muted: bool) -> None:
-        """Host-only chat moderation. Available in any phase (mid-game is
-        the case that actually matters, since Chat only renders once a game
-        has started -- see Game.jsx), unlike kick_player."""
+        """Host-only chat moderation. Available in any phase -- Chat.jsx
+        renders in both the lobby and mid-game, and mute state persists
+        across a game starting/ending (it lives on the Player, not reset by
+        reset_to_lobby) -- unlike kick_player, which is lobby-only."""
         if token != self.host_token:
             raise GameError("Only the host can mute a player.")
         target = next((p for p in self.player_list if p.seat_index == target_seat), None)
