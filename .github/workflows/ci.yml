@@ -1,0 +1,167 @@
+name: CI
+
+# Backend and frontend tests run first; the image build only starts once
+# both pass (see `build.needs` below). GitHub Actions' `needs:` can only
+# gate jobs within the same workflow file, which is why the three previously
+# separate workflows (backend-tests.yml, frontend-tests.yml,
+# docker-publish.yml) live here together now -- otherwise a broken test
+# suite would never stop `:latest` from being pushed to GHCR.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  backend-tests:
+    # backend/tests/ calls the stored procedures directly against Postgres
+    # (see its own conftest.py docstring) -- this just needs a Postgres
+    # service container to create per-test throwaway databases against, no
+    # docker compose stack, no frontend build.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        working-directory: backend
+        env:
+          TEST_ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: pytest -v
+
+  frontend-tests:
+    # frontend/src/**/*.test.{js,jsx} run under Vitest + jsdom -- no
+    # backend, no Postgres, no browser needed (see backend-tests above for
+    # the DB-backed suite this pairs with).
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  build:
+    # Builds backend/ and frontend/ as separate multi-arch (amd64 + arm64)
+    # images and pushes them to GHCR as a single manifest list per tag, so
+    # `docker pull` resolves the right image automatically on Raspberry Pi /
+    # Apple Silicon / other arm64 hosts as well as amd64. QEMU emulates
+    # arm64 on the amd64 runner for the arm64 half of each build.
+    # Pull requests build (to catch a broken Dockerfile) but never push,
+    # since a fork's GITHUB_TOKEN can't write packages here anyway.
+    #
+    # Gated on both test jobs: the images we publish to GHCR (and that the
+    # homelab deploy pulls `:latest` from) should never come from a commit
+    # whose tests didn't pass. Both images wait on both suites rather than
+    # each depending only on its own, since the compose stack deploys
+    # backend+frontend together as one atomic unit anyway.
+    needs: [backend-tests, frontend-tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend
+            context: ./backend
+          - service: frontend
+            context: ./frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # GHCR requires an all-lowercase image path; github.repository isn't
+      # guaranteed to be (repo names can contain uppercase).
+      - name: Compute lowercase image name
+        id: image
+        run: |
+          repo="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          echo "name=${{ env.REGISTRY }}/${repo}/${{ matrix.service }}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract tags/labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build image (and push, except on pull requests)
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          platforms: linux/amd64,linux/arm64
