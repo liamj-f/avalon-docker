@@ -86,7 +86,7 @@ ROLES: dict[str, dict[str, Any]] = {
         "name": "Assassin",
         "team": "evil",
         "optional": True,
-        "description": "If Good wins three missions, you get one shot at identifying Merlin. Guess correctly and Evil steals the win.",
+        "description": "If Good wins three missions, you get one shot at identifying Merlin. Guess correctly and Evil steals the win. If Gawain is in play and you mistake him for Merlin, though, he wins the game for himself — not you.",
     },
     "AGRAVAIN": {
         "id": "AGRAVAIN",
@@ -107,28 +107,28 @@ ROLES: dict[str, dict[str, Any]] = {
         "name": "Gawain",
         "team": "good",
         "optional": True,
-        "description": "A plain Loyal knight with no special knowledge — but a second name the Assassin can win by guessing instead of Merlin.",
+        "description": "A plain Loyal knight with no special knowledge. If the Assassin mistakes you for Merlin and names you, you win the game for yourself — a third outcome, neither Good's nor Evil's.",
     },
     "LANCELOT": {
         "id": "LANCELOT",
         "name": "Lancelot",
         "team": "good",
         "optional": True,
-        "description": "Appears to Merlin as Evil, a built-in red herring. Holds a single Reverse card — while on a quest, may play it instead of Success to flip that quest’s outcome. Incompatible with the Good & Evil Lancelot pair.",
+        "description": "If Merlin is in play, appears to him as Evil, a built-in red herring — otherwise this passes quietly. Holds a single Reverse card — while on a quest, may play it instead of Success to flip that quest’s outcome. Incompatible with the Good & Evil Lancelot pair.",
     },
     "LANCELOT_GOOD": {
         "id": "LANCELOT_GOOD",
         "name": "Lancelot",
         "team": "good",
         "optional": True,
-        "description": "One of a pair of Lancelots. Appears to Merlin as Evil. At a random, secret point in the game the two Lancelots swap allegiance for the rest of the game.",
+        "description": "One of a pair of Lancelots, starting Good. Unlike solo Lancelot, does not appear Evil to Merlin — only your Evil counterpart does. At a random, secret point in the game the two Lancelots swap allegiance for the rest of the game.",
     },
     "LANCELOT_EVIL": {
         "id": "LANCELOT_EVIL",
         "name": "Lancelot",
         "team": "evil",
         "optional": True,
-        "description": "One of a pair of Lancelots. At a random, secret point in the game the two Lancelots swap allegiance for the rest of the game.",
+        "description": "One of a pair of Lancelots, starting Evil. If Merlin is in play he sees you as Evil, same as any other Evil player — your Good counterpart is not shown to him. At a random, secret point in the game the two Lancelots swap allegiance for the rest of the game.",
     },
     "GUINEVERE": {
         "id": "GUINEVERE",
@@ -174,6 +174,44 @@ def default_settings() -> dict[str, bool]:
     }
 
 
+# Characters that only make sense once another one is already in play --
+# same relationships validate_settings checks below, just phrased as "what
+# this needs" so Room.update_settings can also use it to auto-clear a
+# toggle the instant its dependency goes away, instead of leaving a stale,
+# invalid combination sitting there until the host notices the error list.
+# `any: True` means only one of `requires` need be on (the Assassin just
+# needs *a* target, not all three). Lancelot/lancelotPair aren't here --
+# they don't require Merlin (see validate_settings' comment on that).
+ROLE_DEPENDENCIES: dict[str, dict[str, Any]] = {
+    "percival": {"requires": ["merlin"]},
+    "morgana": {"requires": ["percival"]},
+    "mordred": {"requires": ["merlin"]},
+    "guinevere": {"requires": ["lancelotPair"]},
+    "assassin": {"requires": ["merlin", "gawain", "tristanIseult"], "any": True},
+}
+
+
+def cascade_deselect(settings: dict[str, bool]) -> dict[str, bool]:
+    """Clears any toggle whose ROLE_DEPENDENCIES requirement is no longer
+    satisfied, repeating until stable so a chain -- Merlin off should take
+    Percival off, which should then take Morgana off too -- fully unwinds
+    in one call rather than leaving the host to notice and clear each link
+    by hand. Never touches a toggle whose dependency is still satisfied."""
+    settings = dict(settings)
+    changed = True
+    while changed:
+        changed = False
+        for key, dep in ROLE_DEPENDENCIES.items():
+            if not settings.get(key):
+                continue
+            requires = dep["requires"]
+            satisfied = any(settings.get(r) for r in requires) if dep.get("any") else all(settings.get(r) for r in requires)
+            if not satisfied:
+                settings[key] = False
+                changed = True
+    return settings
+
+
 def validate_settings(player_count: int, settings: dict[str, bool]) -> list[str]:
     """Cross-role dependency + capacity checks. Returns human-readable errors (empty = valid)."""
     errors: list[str] = []
@@ -192,10 +230,13 @@ def validate_settings(player_count: int, settings: dict[str, bool]) -> list[str]
         errors.append("Morgana requires Percival to be in play (otherwise she has nothing to fool).")
     if settings.get("mordred") and not settings.get("merlin"):
         errors.append("Mordred requires Merlin to be in play (otherwise there is nothing to hide from).")
-    if settings.get("lancelot") and not settings.get("merlin"):
-        errors.append("Lancelot requires Merlin to be in play (otherwise there is nothing to fool).")
-    if settings.get("lancelotPair") and not settings.get("merlin"):
-        errors.append("The Good & Evil Lancelot pair requires Merlin to be in play (otherwise there is nothing to fool).")
+    # Lancelot (solo or the pair) does NOT require Merlin -- unlike
+    # Percival/Morgana/Mordred, whose entire mechanic is about what Merlin
+    # sees, a Lancelot's Reverse card and allegiance swap both work fine
+    # with no Merlin at the table. Merlin being in play just adds a side
+    # effect on top (see compute_knowledge): solo Lancelot becomes a red
+    # herring, and the pair's genuinely-Evil half shows up in Merlin's
+    # sight same as any other Evil player.
     if settings.get("guinevere") and not settings.get("lancelotPair"):
         errors.append("Guinevere requires the Good & Evil Lancelot pair to be in play.")
     if settings.get("lancelot") and settings.get("lancelotPair"):
@@ -297,11 +338,17 @@ def compute_knowledge(assignments: list[RoleAssignment]) -> dict[int, list[dict[
     evil_non_oberon = [a for a in assignments if a.team == "evil" and a.role_id != "OBERON"]
 
     if merlin:
-        # Evil (minus Mordred) is Merlin's usual sight, but any Lancelot —
-        # solo or from the swapping pair — is a built-in red herring:
-        # Merlin sees them as Evil regardless of their true, current team.
+        # Evil (minus Mordred) is Merlin's usual sight. Solo Lancelot is a
+        # built-in red herring on top of that: though actually Good, he
+        # shows up here regardless. The swapping pair is NOT a double
+        # red herring, though -- only the genuinely-Evil half is Evil by
+        # team (already covered by the filter below); the Good-starting
+        # half is not additionally added the way solo Lancelot is, so
+        # Merlin only ever sees the one Lancelot who's actually Evil at
+        # the start. (The swap itself happens later and isn't reflected
+        # here -- this is a one-time reveal, not a live feed.)
         seen_as_evil = {a.seat for a in assignments if a.team == "evil" and a.role_id != "MORDRED"}
-        seen_as_evil |= {a.seat for a in assignments if a.role_id in ("LANCELOT", "LANCELOT_GOOD")}
+        seen_as_evil |= {a.seat for a in assignments if a.role_id == "LANCELOT"}
         knowledge[merlin.seat] = [{"seat": a.seat, "label": "Evil"} for a in assignments if a.seat in seen_as_evil]
 
     for a in evil_non_oberon:

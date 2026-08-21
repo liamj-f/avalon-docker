@@ -157,6 +157,33 @@ def test_disconnect_midgame_does_not_remove_the_seat():
 
 
 # ---------------------------------------------------------------------------
+# update_settings -- cascade_deselect wiring
+# ---------------------------------------------------------------------------
+
+
+def test_update_settings_auto_deselects_a_now_unmet_dependent():
+    # default_settings() starts with merlin/percival/morgana all True --
+    # turning Merlin off should take Percival (and, transitively, Morgana)
+    # with it, rather than leaving a stale combination sitting there until
+    # the host notices the error list.
+    room = Room("ABCDE")
+    room.add_player("Alice", as_host=True)
+    room.update_settings(room.host_token, {"merlin": False})
+    assert room.settings["merlin"] is False
+    assert room.settings["percival"] is False
+    assert room.settings["morgana"] is False
+
+
+def test_update_settings_leaves_a_still_satisfied_dependent_alone():
+    room = Room("ABCDE")
+    room.add_player("Alice", as_host=True)
+    room.update_settings(room.host_token, {"oberon": True})
+    assert room.settings["merlin"] is True
+    assert room.settings["percival"] is True
+    assert room.settings["morgana"] is True
+
+
+# ---------------------------------------------------------------------------
 # set_muted / kick_player guards (small, but exactly what's easy to get backwards)
 # ---------------------------------------------------------------------------
 
