@@ -86,7 +86,7 @@ ROLES: dict[str, dict[str, Any]] = {
         "name": "Assassin",
         "team": "evil",
         "optional": True,
-        "description": "If Good wins three missions, you get one shot at identifying Merlin. Guess correctly and Evil steals the win. If Gawain is in play and you mistake him for Merlin, though, he wins the game for himself — not you.",
+        "description": "If Good wins three missions, you get one shot at identifying Merlin. Guess correctly and Evil steals the win.",
     },
     "AGRAVAIN": {
         "id": "AGRAVAIN",
@@ -107,14 +107,14 @@ ROLES: dict[str, dict[str, Any]] = {
         "name": "Gawain",
         "team": "good",
         "optional": True,
-        "description": "A plain Loyal knight with no special knowledge. If the Assassin mistakes you for Merlin and names you, you win the game for yourself — a third outcome, neither Good's nor Evil's.",
+        "description": "A plain Loyal knight with no special knowledge — but if the Assassin mistakes you for Merlin, you win the game for yourself, not Good or Evil.",
     },
     "LANCELOT": {
         "id": "LANCELOT",
         "name": "Lancelot",
         "team": "good",
         "optional": True,
-        "description": "If Merlin is in play, appears to him as Evil, a built-in red herring — otherwise this passes quietly. Holds a single Reverse card — while on a quest, may play it instead of Success to flip that quest’s outcome. Incompatible with the Good & Evil Lancelot pair.",
+        "description": "If Merlin is in play, appears to him as Evil, a built-in red herring — otherwise this passes quietly. Holds a single Reverse card — while on a quest, may play it instead of Success to flip that quest’s outcome.",
     },
     "LANCELOT_GOOD": {
         "id": "LANCELOT_GOOD",

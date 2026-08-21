@@ -183,6 +183,32 @@ def test_update_settings_leaves_a_still_satisfied_dependent_alone():
     assert room.settings["morgana"] is True
 
 
+def test_update_settings_turning_on_lancelot_pair_clears_solo_lancelot():
+    room = Room("ABCDE")
+    room.add_player("Alice", as_host=True)
+    room.update_settings(room.host_token, {"lancelot": True})
+    assert room.settings["lancelot"] is True
+
+    room.update_settings(room.host_token, {"lancelotPair": True})
+    assert room.settings["lancelotPair"] is True
+    assert room.settings["lancelot"] is False
+
+
+def test_update_settings_turning_on_solo_lancelot_clears_the_pair_and_cascades_to_guinevere():
+    # Guinevere requires the pair -- clearing the pair to make room for solo
+    # Lancelot should take Guinevere with it too, same chain-unwinding as
+    # the Merlin/Percival/Morgana case above.
+    room = Room("ABCDE")
+    room.add_player("Alice", as_host=True)
+    room.update_settings(room.host_token, {"lancelotPair": True, "guinevere": True})
+    assert room.settings["guinevere"] is True
+
+    room.update_settings(room.host_token, {"lancelot": True})
+    assert room.settings["lancelot"] is True
+    assert room.settings["lancelotPair"] is False
+    assert room.settings["guinevere"] is False
+
+
 # ---------------------------------------------------------------------------
 # set_muted / kick_player guards (small, but exactly what's easy to get backwards)
 # ---------------------------------------------------------------------------

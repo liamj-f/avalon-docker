@@ -227,12 +227,22 @@ class Room:
         if "hideRoleSelections" in incoming:
             self.hide_role_selections = bool(incoming.pop("hideRoleSelections"))
         if incoming:
+            merged = {**self.settings, **incoming}
+            # Solo Lancelot and the Good & Evil pair are mutually exclusive
+            # (both dress up as "a Lancelot" but are otherwise different
+            # characters) -- turning one on always wins over the other,
+            # mirroring the lobby UI, which greys out whichever one you
+            # didn't just click rather than letting both end up selected.
+            if incoming.get("lancelot"):
+                merged["lancelotPair"] = False
+            elif incoming.get("lancelotPair"):
+                merged["lancelot"] = False
             # cascade_deselect also auto-clears anything whose dependency
             # this change just removed (e.g. turning Merlin off also turns
             # off Percival, which then also turns off Morgana) -- otherwise
             # the host is left with a stale, invalid combination that just
             # sits in the error list until they notice and clear it by hand.
-            self.settings = cascade_deselect({**self.settings, **incoming})
+            self.settings = cascade_deselect(merged)
 
     def set_role_preference(self, token: str, key: str, want: bool) -> None:
         """Non-binding preference poll: any player can say which roles they'd like to see."""
