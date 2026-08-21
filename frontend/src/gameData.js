@@ -24,7 +24,7 @@ export const ROLE_TOGGLES = [
     name: 'Gawain',
     team: 'good',
     description:
-      'A plain knight with no special knowledge — but a second name the Assassin can win by guessing instead of Merlin.',
+      'A plain knight with no special knowledge. If the Assassin mistakes you for Merlin and names you, you win the game for yourself — a third outcome, neither Good’s nor Evil’s.',
   },
   {
     key: 'percival',
@@ -55,7 +55,7 @@ export const ROLE_TOGGLES = [
     name: 'Assassin',
     team: 'evil',
     description:
-      'Gets one shot at naming Merlin (or Gawain, or the Tristan & Iseult pair) if Good wins 3 missions. Requires at least one of those to be in play.',
+      'Gets one shot at naming who you believe is Merlin (or the Tristan & Iseult pair) if Good wins 3 missions. Guess right and Evil steals the win — but if Gawain is in play and you mistake him for Merlin, he wins the game for himself, not you. Requires Merlin, Gawain, or the Tristan & Iseult pair to be in play.',
   },
   {
     key: 'tristanIseult',
@@ -80,14 +80,14 @@ export const ROLE_TOGGLES = [
     name: 'Lancelot',
     team: 'good',
     description:
-      'Appears to Merlin as Evil. Holds a single Reverse card to flip one quest’s outcome. Cannot be combined with the Lancelot pair below.',
+      'If Merlin is in play, appears to him as Evil — otherwise this passes quietly. Holds a single Reverse card to flip one quest’s outcome. Cannot be combined with the Lancelot pair below.',
   },
   {
     key: 'lancelotPair',
     name: 'Good & Evil Lancelot (pair)',
     team: 'mixed',
     description:
-      'Two Lancelots — one starts Good, one starts Evil — who secretly swap allegiance at a random point in the game. Both appear to Merlin as Evil. Cannot be combined with solo Lancelot above.',
+      'Two Lancelots — one starts Good, one starts Evil — who secretly swap allegiance at a random point in the game. If Merlin is in play, only the one currently Evil at the start appears to him as Evil — the Good one does not. Cannot be combined with solo Lancelot above.',
   },
   {
     key: 'guinevere',
@@ -163,8 +163,8 @@ export function validateSettingsClient(playerCount, settings) {
   if (settings.percival && !settings.merlin) errors.push('Percival requires Merlin to be in play.');
   if (settings.morgana && !settings.percival) errors.push('Morgana requires Percival to be in play.');
   if (settings.mordred && !settings.merlin) errors.push('Mordred requires Merlin to be in play.');
-  if (settings.lancelot && !settings.merlin) errors.push('Lancelot requires Merlin to be in play.');
-  if (settings.lancelotPair && !settings.merlin) errors.push('The Good & Evil Lancelot pair requires Merlin to be in play.');
+  // Lancelot (solo or the pair) does NOT require Merlin -- see the same
+  // note in roles.py's validate_settings, which this mirrors.
   if (settings.guinevere && !settings.lancelotPair) errors.push('Guinevere requires the Good & Evil Lancelot pair to be in play.');
   if (settings.lancelot && settings.lancelotPair) errors.push('Lancelot (solo) and the Lancelot pair cannot both be in play — pick one.');
 
@@ -196,13 +196,14 @@ export function togglingWouldExceedSlots(playerCount, settings, key) {
 // validate_settings, just phrased as "what's this waiting on" so the lobby
 // can grey the toggle out *before* the host picks an invalid combination,
 // not just flag it after. `any: true` means any one of `requires` will do
-// (the Assassin just needs *a* target, not all three).
+// (the Assassin just needs *a* target, not all three). Lancelot/
+// lancelotPair aren't here -- they don't require Merlin (see the note in
+// validateSettingsClient above); Merlin being in play just changes what
+// they look like to him, it isn't a prerequisite for playing them at all.
 const ROLE_DEPENDENCIES = {
   percival: { requires: ['merlin'], label: 'Merlin' },
   morgana: { requires: ['percival'], label: 'Percival' },
   mordred: { requires: ['merlin'], label: 'Merlin' },
-  lancelot: { requires: ['merlin'], label: 'Merlin' },
-  lancelotPair: { requires: ['merlin'], label: 'Merlin' },
   guinevere: { requires: ['lancelotPair'], label: 'the Good & Evil Lancelot pair' },
   assassin: {
     requires: ['merlin', 'gawain', 'tristanIseult'],

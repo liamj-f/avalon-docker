@@ -149,10 +149,13 @@ describe('unmetDependency', () => {
     expect(unmetDependency({ merlin: true, percival: true }, 'morgana')).toBeNull();
   });
 
-  it('flags Mordred, Lancelot, and the Lancelot pair as each missing Merlin', () => {
+  it('flags Mordred as missing Merlin', () => {
     expect(unmetDependency({}, 'mordred')).toBe('Merlin');
-    expect(unmetDependency({}, 'lancelot')).toBe('Merlin');
-    expect(unmetDependency({}, 'lancelotPair')).toBe('Merlin');
+  });
+
+  it('never blocks Lancelot or the Lancelot pair for a missing Merlin -- they work without him', () => {
+    expect(unmetDependency({}, 'lancelot')).toBeNull();
+    expect(unmetDependency({}, 'lancelotPair')).toBeNull();
   });
 
   it('flags Guinevere as missing the Lancelot pair, even with solo Lancelot on', () => {

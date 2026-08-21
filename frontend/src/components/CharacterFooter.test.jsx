@@ -103,7 +103,7 @@ describe('CharacterFooter', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Assassin' }));
     expect(screen.queryByText(/Sees all Evil/)).not.toBeInTheDocument();
-    expect(screen.getByText(/Gets one shot at naming Merlin/)).toBeInTheDocument();
+    expect(screen.getByText(/Gets one shot at naming who you believe is Merlin/)).toBeInTheDocument();
   });
 
   it('shows a description for a filler role too', () => {

@@ -18,7 +18,7 @@ from uuid import UUID
 
 import game_db
 from game.config import MAX_PLAYERS, MIN_PLAYERS
-from game.roles import GameError, assign_roles, compute_knowledge, default_settings, validate_settings
+from game.roles import GameError, assign_roles, cascade_deselect, compute_knowledge, default_settings, validate_settings
 from room_code import generate_unique_code
 
 MAX_CHAT_HISTORY = 200
@@ -227,7 +227,12 @@ class Room:
         if "hideRoleSelections" in incoming:
             self.hide_role_selections = bool(incoming.pop("hideRoleSelections"))
         if incoming:
-            self.settings = {**self.settings, **incoming}
+            # cascade_deselect also auto-clears anything whose dependency
+            # this change just removed (e.g. turning Merlin off also turns
+            # off Percival, which then also turns off Morgana) -- otherwise
+            # the host is left with a stale, invalid combination that just
+            # sits in the error list until they notice and clear it by hand.
+            self.settings = cascade_deselect({**self.settings, **incoming})
 
     def set_role_preference(self, token: str, key: str, want: bool) -> None:
         """Non-binding preference poll: any player can say which roles they'd like to see."""

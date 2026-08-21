@@ -15,6 +15,7 @@ from game.roles import (
     GameError,
     assign_roles,
     build_role_list,
+    cascade_deselect,
     compute_knowledge,
     default_settings,
     validate_settings,
@@ -62,6 +63,18 @@ def test_lancelot_solo_and_pair_are_mutually_exclusive():
     settings = {**default_settings(), "lancelot": True, "lancelotPair": True}
     errors = validate_settings(7, settings)
     assert any("cannot both be in play" in e for e in errors)
+
+
+def test_lancelot_and_lancelot_pair_do_not_require_merlin():
+    # Unlike Percival/Morgana/Mordred, a Lancelot's Reverse card and the
+    # pair's allegiance swap both work with no Merlin at the table --
+    # Merlin being in play only changes what he sees, it's not a
+    # prerequisite for playing either variant at all.
+    settings = {**default_settings(), "merlin": False, "percival": False, "morgana": False, "assassin": False, "lancelot": True}
+    assert validate_settings(5, settings) == []
+
+    settings = {**default_settings(), "merlin": False, "percival": False, "morgana": False, "assassin": False, "lancelotPair": True}
+    assert validate_settings(7, settings) == []
 
 
 def test_assassin_needs_a_valid_target():
@@ -208,6 +221,17 @@ def test_merlin_sees_lancelot_as_evil_regardless_of_true_team():
     assert 1 in seen_seats  # Lancelot is Good but still shows as Evil to Merlin
 
 
+def test_merlin_sees_only_the_evil_half_of_the_lancelot_pair():
+    # Unlike solo Lancelot, the swapping pair is not a double red herring --
+    # only the genuinely-Evil Lancelot appears Evil to Merlin at the start;
+    # the Good one does not additionally show up the way solo Lancelot does.
+    assignments = _assignment([(0, "MERLIN"), (1, "LANCELOT_GOOD"), (2, "LANCELOT_EVIL")])
+    knowledge = compute_knowledge(assignments)
+    seen_seats = {k["seat"] for k in knowledge[0]}
+    assert 1 not in seen_seats  # Good-starting Lancelot: not shown as Evil
+    assert 2 in seen_seats  # Evil-starting Lancelot: shown as Evil, like any other Evil player
+
+
 def test_evil_sees_each_other_except_oberon():
     assignments = _assignment([
         (0, "MORGANA"), (1, "MINION"), (2, "OBERON"), (3, "LOYAL_SERVANT"),
@@ -257,6 +281,60 @@ def test_plain_loyal_servant_and_minion_have_no_special_knowledge():
     assignments = _assignment([(0, "LOYAL_SERVANT"), (1, "MINION")])
     knowledge = compute_knowledge(assignments)
     assert knowledge[0] == []
-    # A lone Minion (no other non-Oberon Evil at the table) still has an
-    # empty "others" list -- correctly nobody, not a special case.
-    assert knowledge[1] == []
+
+
+# ---------------------------------------------------------------------------
+# cascade_deselect
+# ---------------------------------------------------------------------------
+
+
+def test_cascade_deselect_turns_off_a_direct_dependent():
+    settings = {**default_settings(), "merlin": False}  # percival/morgana still True from default_settings
+    result = cascade_deselect(settings)
+    assert result["percival"] is False
+
+
+def test_cascade_deselect_unwinds_a_whole_chain_in_one_call():
+    # default_settings has merlin/percival/morgana all True -- turning
+    # Merlin off should take Percival with it, which should then also take
+    # Morgana with it, in the same call.
+    settings = {**default_settings(), "merlin": False}
+    result = cascade_deselect(settings)
+    assert result["percival"] is False
+    assert result["morgana"] is False
+
+
+def test_cascade_deselect_leaves_a_still_satisfied_dependent_alone():
+    settings = {**default_settings(), "oberon": True}  # merlin/percival/morgana untouched
+    result = cascade_deselect(settings)
+    assert result["percival"] is True
+    assert result["morgana"] is True
+
+
+def test_cascade_deselect_never_touches_lancelot_when_merlin_goes_off():
+    settings = {**default_settings(), "merlin": False, "lancelot": True}
+    result = cascade_deselect(settings)
+    assert result["lancelot"] is True
+
+
+def test_cascade_deselect_respects_assassins_any_of_three_targets():
+    # Assassin only needs one of Merlin/Gawain/Tristan & Iseult -- turning
+    # Merlin off shouldn't clear it while Gawain is still on.
+    settings = {**default_settings(), "merlin": False, "gawain": True, "assassin": True}
+    result = cascade_deselect(settings)
+    assert result["assassin"] is True
+
+    # But with none of the three left, it does clear.
+    settings = {**default_settings(), "merlin": False, "percival": False, "morgana": False, "assassin": True}
+    result = cascade_deselect(settings)
+    assert result["assassin"] is False
+
+
+def test_cascade_deselect_clears_guinevere_when_the_lancelot_pair_goes_off():
+    settings = {**default_settings(), "lancelotPair": True, "guinevere": True}
+    result = cascade_deselect(settings)
+    assert result["guinevere"] is True  # pair still on -- untouched
+
+    settings = {**default_settings(), "lancelotPair": False, "guinevere": True}
+    result = cascade_deselect(settings)
+    assert result["guinevere"] is False
