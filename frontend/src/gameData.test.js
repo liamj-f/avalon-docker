@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateSettingsClient, togglingWouldExceedSlots } from './gameData.js';
+import { validateSettingsClient, togglingWouldExceedSlots, unmetDependency, fullRoster } from './gameData.js';
 
 // validateSettingsClient mirrors backend/src/game/roles.py's real
 // validation purely so the lobby can warn a host before they hit "Start" --
@@ -127,5 +127,82 @@ describe('togglingWouldExceedSlots', () => {
 
   it('never blocks anything for an unsupported player count', () => {
     expect(togglingWouldExceedSlots(4, {}, 'merlin')).toBe(false);
+  });
+});
+
+// The lobby's per-toggle dependency gate: a character that requires
+// another one to already be in play is disabled, not just flagged after
+// the fact, until that dependency is satisfied.
+describe('unmetDependency', () => {
+  it('returns null for a role with no dependency', () => {
+    expect(unmetDependency({}, 'merlin')).toBeNull();
+    expect(unmetDependency({}, 'oberon')).toBeNull();
+  });
+
+  it('flags Percival as missing Merlin until Merlin is on', () => {
+    expect(unmetDependency({}, 'percival')).toBe('Merlin');
+    expect(unmetDependency({ merlin: true }, 'percival')).toBeNull();
+  });
+
+  it('flags Morgana as missing Percival specifically, not Merlin', () => {
+    expect(unmetDependency({ merlin: true }, 'morgana')).toBe('Percival');
+    expect(unmetDependency({ merlin: true, percival: true }, 'morgana')).toBeNull();
+  });
+
+  it('flags Mordred, Lancelot, and the Lancelot pair as each missing Merlin', () => {
+    expect(unmetDependency({}, 'mordred')).toBe('Merlin');
+    expect(unmetDependency({}, 'lancelot')).toBe('Merlin');
+    expect(unmetDependency({}, 'lancelotPair')).toBe('Merlin');
+  });
+
+  it('flags Guinevere as missing the Lancelot pair, even with solo Lancelot on', () => {
+    expect(unmetDependency({ merlin: true, lancelot: true }, 'guinevere')).toBe('the Good & Evil Lancelot pair');
+    expect(unmetDependency({ merlin: true, lancelotPair: true }, 'guinevere')).toBeNull();
+  });
+
+  it('clears the Assassin once any one of its three valid targets is on', () => {
+    const label = 'Merlin, Gawain, or the Tristan & Iseult pair';
+    expect(unmetDependency({}, 'assassin')).toBe(label);
+    expect(unmetDependency({ merlin: true }, 'assassin')).toBeNull();
+    expect(unmetDependency({ gawain: true }, 'assassin')).toBeNull();
+    expect(unmetDependency({ tristanIseult: true }, 'assassin')).toBeNull();
+  });
+});
+
+// The in-game footer's full player-by-player headcount, not just the
+// named specials: fullRoster fills in Loyal Servants / Minions for
+// whatever's left over, and reports the player count's fixed Good/Evil
+// split alongside them.
+describe('fullRoster', () => {
+  it('returns null for an unsupported player count', () => {
+    expect(fullRoster(4, {})).toBeNull();
+  });
+
+  it('fills every slot with plain roles when nothing special is toggled', () => {
+    const roster = fullRoster(5, {});
+    expect(roster.good).toBe(3);
+    expect(roster.evil).toBe(2);
+    expect(roster.items).toEqual([
+      expect.objectContaining({ key: 'loyalServant', count: 3 }),
+      expect.objectContaining({ key: 'minion', count: 2 }),
+    ]);
+  });
+
+  it('lists named specials ahead of the fillers that cover what is left', () => {
+    const roster = fullRoster(5, { merlin: true, assassin: true });
+    expect(roster.items.map((r) => [r.key, r.count])).toEqual([
+      ['merlin', 1],
+      ['assassin', 1],
+      ['loyalServant', 2],
+      ['minion', 1],
+    ]);
+  });
+
+  it('weighs Tristan & Iseult and the Lancelot pair as 2 seats each, and omits an empty filler', () => {
+    // 5 players -> 3 Good slots, all claimed by the pair (2) + Merlin (1) --
+    // no Loyal Servant left to fill.
+    const roster = fullRoster(5, { merlin: true, tristanIseult: true });
+    expect(roster.items.find((r) => r.key === 'tristanIseult')).toMatchObject({ count: 2 });
+    expect(roster.items.some((r) => r.key === 'loyalServant')).toBe(false);
   });
 });

@@ -188,3 +188,80 @@ export function togglingWouldExceedSlots(playerCount, settings, key) {
   const { evilSpecial, goodSpecial } = specialSlotCounts({ ...settings, [key]: true });
   return evilSpecial > cfg.evil || goodSpecial > cfg.good;
 }
+
+// Same idea as the slot cap above, but for characters that only make sense
+// once another one is already in play (Morgana has nothing to fool without
+// Percival; Mordred nothing to hide from without Merlin; ...) -- mirrors
+// the same "requires" checks in validateSettingsClient/roles.py's
+// validate_settings, just phrased as "what's this waiting on" so the lobby
+// can grey the toggle out *before* the host picks an invalid combination,
+// not just flag it after. `any: true` means any one of `requires` will do
+// (the Assassin just needs *a* target, not all three).
+const ROLE_DEPENDENCIES = {
+  percival: { requires: ['merlin'], label: 'Merlin' },
+  morgana: { requires: ['percival'], label: 'Percival' },
+  mordred: { requires: ['merlin'], label: 'Merlin' },
+  lancelot: { requires: ['merlin'], label: 'Merlin' },
+  lancelotPair: { requires: ['merlin'], label: 'Merlin' },
+  guinevere: { requires: ['lancelotPair'], label: 'the Good & Evil Lancelot pair' },
+  assassin: {
+    requires: ['merlin', 'gawain', 'tristanIseult'],
+    any: true,
+    label: 'Merlin, Gawain, or the Tristan & Iseult pair',
+  },
+};
+
+// Returns a human-readable label for this toggle's still-missing
+// dependency, or null if it has none (or its dependency is already
+// satisfied). Only meaningful for a currently-off toggle -- an
+// already-enabled one keeps working even if its dependency gets turned off
+// later (validateSettingsClient still catches that combination and blocks
+// starting, same as before; this only gates *turning one on*).
+export function unmetDependency(settings, key) {
+  const dep = ROLE_DEPENDENCIES[key];
+  if (!dep) return null;
+  const satisfied = dep.any ? dep.requires.some((k) => settings[k]) : dep.requires.every((k) => settings[k]);
+  return satisfied ? null : dep.label;
+}
+
+// The two plain roles that silently fill whatever Good/Evil slots the
+// toggled specials leave over -- see roles.py's build_role_list, which
+// this mirrors. Not part of ROLE_TOGGLES since the host can't pick them,
+// but included in fullRoster() below so the footer can show the *whole*
+// roster, not just which named characters are active.
+const LOYAL_SERVANT = {
+  key: 'loyalServant',
+  name: 'Loyal Servant of Arthur',
+  team: 'good',
+  description: 'A plain member of Arthur’s court. No special knowledge — vote wisely and watch the table.',
+};
+const MINION = {
+  key: 'minion',
+  name: 'Minion of Mordred',
+  team: 'evil',
+  description: 'A plain servant of Evil. Knows its fellow Minions (except Oberon) — sabotage missions without getting caught.',
+};
+
+// The full roster that will actually be dealt at this player count: every
+// toggled special character (weighted 2 seats for Tristan & Iseult and the
+// Lancelot pair, same weighting as specialSlotCounts) plus however many
+// plain Loyal Servants / Minions fill the rest. `good`/`evil` are the
+// player count's fixed total split either way, straight from
+// MISSION_CONFIG -- simpler and always right, rather than re-deriving it
+// from the roster items (the Lancelot pair's `team: 'mixed'` would make
+// summing item counts by team error-prone). Returns null for an
+// unsupported player count.
+export function fullRoster(playerCount, settings) {
+  const cfg = MISSION_CONFIG[playerCount];
+  if (!cfg) return null;
+  const items = ROLE_TOGGLES.filter((r) => settings[r.key]).map((r) => ({
+    ...r,
+    count: r.key === 'tristanIseult' || r.key === 'lancelotPair' ? 2 : 1,
+  }));
+  const { evilSpecial, goodSpecial } = specialSlotCounts(settings);
+  const loyalServants = cfg.good - goodSpecial;
+  const minions = cfg.evil - evilSpecial;
+  if (loyalServants > 0) items.push({ ...LOYAL_SERVANT, count: loyalServants });
+  if (minions > 0) items.push({ ...MINION, count: minions });
+  return { items, good: cfg.good, evil: cfg.evil };
+}

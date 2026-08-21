@@ -1,6 +1,13 @@
 import React from 'react';
 import { useGame } from '../store.jsx';
-import { ROLE_TOGGLES, EXTENSION_TOGGLES, validateSettingsClient, togglingWouldExceedSlots } from '../gameData.js';
+import {
+  ROLE_TOGGLES,
+  EXTENSION_TOGGLES,
+  MISSION_CONFIG,
+  validateSettingsClient,
+  togglingWouldExceedSlots,
+  unmetDependency,
+} from '../gameData.js';
 import { PlayerShield } from '../components/PlayerAvatar.jsx';
 import Chat from '../components/Chat.jsx';
 
@@ -27,6 +34,12 @@ export default function Lobby() {
   const errors = validateSettingsClient(players.length, settings);
   const notEnoughPlayers = players.length < minPlayers;
   const canStart = you?.isHost && errors.length === 0 && !notEnoughPlayers;
+  // Live "how many Good/Evil at this table" readout -- lets everyone see
+  // the split forming as players join/leave, rather than only finding out
+  // once the game deals roles. undefined outside 5-10 players (mirrors
+  // MISSION_CONFIG's own range; notEnoughPlayers/maxPlayers already cover
+  // that case with their own messaging).
+  const missionCfg = MISSION_CONFIG[players.length];
 
   const copyCode = () => {
     navigator.clipboard?.writeText(room.code).catch(() => {});
@@ -56,6 +69,17 @@ export default function Lobby() {
       // not 1, already accounted for inside togglingWouldExceedSlots.
       // Never blocks turning an already-enabled one back off.
       const noSlotsLeft = !active && togglingWouldExceedSlots(players.length, settings, r.key);
+      // Same idea for characters that only make sense once another one is
+      // already in play (Morgana needs Percival, Assassin needs a target,
+      // ...) -- checked ahead of the slot cap so a still-missing dependency
+      // is what the host sees first, since it's the more fundamental
+      // reason the toggle isn't available yet.
+      const missingDependency = !active ? unmetDependency(settings, r.key) : null;
+      const disabledReason = missingDependency
+        ? `Requires ${missingDependency} to be in play first.`
+        : noSlotsLeft
+          ? `Not enough player slots left at ${players.length} players to add this.`
+          : undefined;
       return (
         <div key={r.key} className={`role-toggle role-toggle-${r.team || 'neutral'} ${active ? 'active' : ''}`}>
           <button
@@ -63,8 +87,8 @@ export default function Lobby() {
             className="role-toggle-main"
             aria-pressed={active}
             onClick={() => toggleSetting(r.key)}
-            disabled={!you?.isHost || noSlotsLeft}
-            title={noSlotsLeft ? `Not enough player slots left at ${players.length} players to add this.` : undefined}
+            disabled={!you?.isHost || noSlotsLeft || !!missingDependency}
+            title={disabledReason}
           >
             <div className="role-toggle-head">
               <span className="role-toggle-name">{r.name}</span>
@@ -104,6 +128,12 @@ export default function Lobby() {
         <h2 className="section-title">
           Players ({players.length}/{maxPlayers})
         </h2>
+        {missionCfg && (
+          <div className="lobby-team-split">
+            <span className="team-chip team-chip-good">{missionCfg.good} Good</span>
+            <span className="team-chip team-chip-evil">{missionCfg.evil} Evil</span>
+          </div>
+        )}
         <ul className="player-list">
           {players.map((p) => (
             <li key={p.seat} className={`player-row ${p.connected ? '' : 'player-disconnected'}`}>
