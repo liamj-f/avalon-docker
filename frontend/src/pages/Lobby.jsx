@@ -7,6 +7,7 @@ import {
   validateSettingsClient,
   togglingWouldExceedSlots,
   unmetDependency,
+  conflictingWith,
 } from '../gameData.js';
 import { PlayerShield } from '../components/PlayerAvatar.jsx';
 import Chat from '../components/Chat.jsx';
@@ -75,11 +76,20 @@ export default function Lobby() {
       // is what the host sees first, since it's the more fundamental
       // reason the toggle isn't available yet.
       const missingDependency = !active ? unmetDependency(settings, r.key) : null;
+      // And the reverse relationship -- solo Lancelot and the pair can
+      // never both be on. Room.update_settings would silently resolve this
+      // in the host's favor regardless (whichever they just clicked wins),
+      // but greying out the other option makes that visible instead of
+      // surprising -- clicking Lancelot while the pair is active would
+      // otherwise look like nothing happened.
+      const conflict = !active ? conflictingWith(settings, r.key) : null;
       const disabledReason = missingDependency
         ? `Requires ${missingDependency} to be in play first.`
-        : noSlotsLeft
-          ? `Not enough player slots left at ${players.length} players to add this.`
-          : undefined;
+        : conflict
+          ? `Cannot be combined with ${conflict}.`
+          : noSlotsLeft
+            ? `Not enough player slots left at ${players.length} players to add this.`
+            : undefined;
       return (
         <div key={r.key} className={`role-toggle role-toggle-${r.team || 'neutral'} ${active ? 'active' : ''}`}>
           <button
@@ -87,7 +97,7 @@ export default function Lobby() {
             className="role-toggle-main"
             aria-pressed={active}
             onClick={() => toggleSetting(r.key)}
-            disabled={!you?.isHost || noSlotsLeft || !!missingDependency}
+            disabled={!you?.isHost || noSlotsLeft || !!missingDependency || !!conflict}
             title={disabledReason}
           >
             <div className="role-toggle-head">

@@ -24,7 +24,7 @@ export const ROLE_TOGGLES = [
     name: 'Gawain',
     team: 'good',
     description:
-      'A plain knight with no special knowledge. If the Assassin mistakes you for Merlin and names you, you win the game for yourself — a third outcome, neither Good’s nor Evil’s.',
+      'A plain knight with no special knowledge — but if the Assassin mistakes you for Merlin, you win the game for yourself, not Good or Evil.',
   },
   {
     key: 'percival',
@@ -55,7 +55,7 @@ export const ROLE_TOGGLES = [
     name: 'Assassin',
     team: 'evil',
     description:
-      'Gets one shot at naming who you believe is Merlin (or the Tristan & Iseult pair) if Good wins 3 missions. Guess right and Evil steals the win — but if Gawain is in play and you mistake him for Merlin, he wins the game for himself, not you. Requires Merlin, Gawain, or the Tristan & Iseult pair to be in play.',
+      'Gets one shot at naming who you believe is Merlin (or the Tristan & Iseult pair) if Good wins 3 missions. Guess right and Evil steals the win.',
   },
   {
     key: 'tristanIseult',
@@ -80,14 +80,14 @@ export const ROLE_TOGGLES = [
     name: 'Lancelot',
     team: 'good',
     description:
-      'If Merlin is in play, appears to him as Evil — otherwise this passes quietly. Holds a single Reverse card to flip one quest’s outcome. Cannot be combined with the Lancelot pair below.',
+      'If Merlin is in play, appears to him as Evil — otherwise this passes quietly. Holds a single Reverse card to flip one quest’s outcome.',
   },
   {
     key: 'lancelotPair',
     name: 'Good & Evil Lancelot (pair)',
     team: 'mixed',
     description:
-      'Two Lancelots — one starts Good, one starts Evil — who secretly swap allegiance at a random point in the game. If Merlin is in play, only the one currently Evil at the start appears to him as Evil — the Good one does not. Cannot be combined with solo Lancelot above.',
+      'Two Lancelots — one starts Good, one starts Evil — who secretly swap allegiance at a random point in the game. If Merlin is in play, only the one currently Evil at the start appears to him as Evil — the Good one does not.',
   },
   {
     key: 'guinevere',
@@ -223,6 +223,26 @@ export function unmetDependency(settings, key) {
   if (!dep) return null;
   const satisfied = dep.any ? dep.requires.some((k) => settings[k]) : dep.requires.every((k) => settings[k]);
   return satisfied ? null : dep.label;
+}
+
+// Toggles that can never both be on at once -- currently just the two
+// Lancelot variants (both dress up as "a Lancelot" but are otherwise
+// different characters). Symmetric by construction: each entry names the
+// other. Backed by the same enforcement server-side (Room.update_settings
+// clears whichever one you didn't just click), so the lobby greying this
+// out isn't just cosmetic -- it matches what actually happens either way.
+const ROLE_CONFLICTS = {
+  lancelot: { with: 'lancelotPair', label: 'the Good & Evil Lancelot pair' },
+  lancelotPair: { with: 'lancelot', label: 'solo Lancelot' },
+};
+
+// Returns a human-readable label for whichever already-active toggle this
+// one conflicts with, or null if there's no conflict (or none of it is
+// active). Same "only gates turning one on" scope as unmetDependency.
+export function conflictingWith(settings, key) {
+  const conflict = ROLE_CONFLICTS[key];
+  if (!conflict) return null;
+  return settings[conflict.with] ? conflict.label : null;
 }
 
 // The two plain roles that silently fill whatever Good/Evil slots the

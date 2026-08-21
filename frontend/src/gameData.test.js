@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateSettingsClient, togglingWouldExceedSlots, unmetDependency, fullRoster } from './gameData.js';
+import { validateSettingsClient, togglingWouldExceedSlots, unmetDependency, conflictingWith, fullRoster } from './gameData.js';
 
 // validateSettingsClient mirrors backend/src/game/roles.py's real
 // validation purely so the lobby can warn a host before they hit "Start" --
@@ -169,6 +169,27 @@ describe('unmetDependency', () => {
     expect(unmetDependency({ merlin: true }, 'assassin')).toBeNull();
     expect(unmetDependency({ gawain: true }, 'assassin')).toBeNull();
     expect(unmetDependency({ tristanIseult: true }, 'assassin')).toBeNull();
+  });
+});
+
+// Solo Lancelot and the pair grey each other out -- same disabled/tooltip
+// mechanism as unmetDependency, just for "conflicts with" instead of
+// "requires". Room.update_settings enforces the same rule server-side, so
+// this is what actually determines the outcome, not just cosmetic.
+describe('conflictingWith', () => {
+  it('returns null for a role with no conflicts', () => {
+    expect(conflictingWith({}, 'merlin')).toBeNull();
+    expect(conflictingWith({ lancelot: true }, 'guinevere')).toBeNull();
+  });
+
+  it('flags Lancelot as conflicting once the pair is on, and vice versa', () => {
+    expect(conflictingWith({ lancelotPair: true }, 'lancelot')).toBe('the Good & Evil Lancelot pair');
+    expect(conflictingWith({ lancelot: true }, 'lancelotPair')).toBe('solo Lancelot');
+  });
+
+  it('returns null when neither Lancelot variant is on', () => {
+    expect(conflictingWith({}, 'lancelot')).toBeNull();
+    expect(conflictingWith({}, 'lancelotPair')).toBeNull();
   });
 });
 
