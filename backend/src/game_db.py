@@ -185,6 +185,15 @@ async def load_game_state_for_seat(game_id: UUID, seat: int | None) -> dict[str,
     )
     excalibur_events_by_mission = {r["mission_number"]: r for r in excalibur_event_rows}
 
+    # The paired Lancelots' swap is not secret about *when* it happens --
+    # only *who* is involved stays hidden. games.swap_mission_numbers is
+    # the full schedule (1 or 2 missions, chosen at deal time), but this
+    # only ever gets compared against mission_rows above, which by
+    # construction holds nothing but already-resolved missions -- so this
+    # can never leak a future scheduled swap, only confirm one that's
+    # already happened, exactly when it happened.
+    swap_mission_numbers = set(g["swap_mission_numbers"] or [])
+
     settings = g["settings"]
 
     base: dict[str, Any] = {
@@ -205,6 +214,10 @@ async def load_game_state_for_seat(game_id: UUID, seat: int | None) -> dict[str,
                 "failCount": m["fail_count"],
                 "cardCounts": card_counts.get(m["mission_number"], {"success": 0, "fail": 0, "reverse": 0}),
                 **_excalibur_summary_for_mission(excalibur_events_by_mission.get(m["mission_number"])),
+                # True the instant this specific quest is the one the pair
+                # swapped on -- announced with the rest of the quest's
+                # result, not held back for some later standing banner.
+                "lancelotsSwapped": m["mission_number"] in swap_mission_numbers,
             }
             for m in mission_rows
         ],
@@ -229,11 +242,11 @@ async def load_game_state_for_seat(game_id: UUID, seat: int | None) -> dict[str,
         "excaliburUsed": g["excalibur_used"],
         # Whether Lancelot's Reverse card / the paired Lancelots' swap have
         # happened is safe to broadcast to everyone: it never says who's
-        # involved, just that the event occurred. lancelotsSwapped stays a
-        # plain boolean (has it swapped at least once) rather than exposing
-        # the actual count -- "twice" would tell the table the pair is back
-        # to their original allegiance, which is more than the base rule's
-        # "just that the event occurred" is meant to leak.
+        # involved, just that the event occurred. This is the "as of right
+        # now" aggregate (has it swapped at least once); missionResults[]
+        # below carries the same fact per-quest, so anyone can already see
+        # exactly *when* each swap landed -- not secret, only who stays
+        # hidden.
         "lancelotReverseUsed": g["lancelot_reverse_used"] if settings.get("lancelot") else None,
         "lancelotsSwapped": (g["lancelots_swap_count"] > 0) if settings.get("lancelotPair") else None,
     }
