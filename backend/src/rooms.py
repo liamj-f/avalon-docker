@@ -305,10 +305,12 @@ class Room:
         # that quest's team, as part of proposing it (sp_propose_team).
         lady_holder_seat = random.choice(seats) if self.settings.get("ladyOfLake") else None
 
-        # Paired Lancelots: the mission at which they swap allegiance is
+        # Paired Lancelots: the mission(s) at which they swap allegiance are
         # chosen once here, secretly, and never revealed to anyone -- see
-        # _resolve_mission in the stored procedures.
-        swap_mission_number = random.randrange(5) if self.settings.get("lancelotPair") else None
+        # _resolve_mission in the stored procedures. Random and can happen
+        # more than once, but never more than twice -- 1 or 2 distinct
+        # missions, each coin-flipped independently of the other.
+        swap_mission_numbers = random.sample(range(5), k=random.choice([1, 2])) if self.settings.get("lancelotPair") else None
 
         players = [
             {
@@ -328,7 +330,7 @@ class Room:
             leader_seat=leader_seat,
             lady_holder_seat=lady_holder_seat,
             excalibur_holder_seat=None,  # no starting holder anymore -- see the comment above
-            swap_mission_number=swap_mission_number,
+            swap_mission_numbers=swap_mission_numbers,
             players=players,
         )
         self.phase = "in_game"

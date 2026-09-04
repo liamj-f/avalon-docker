@@ -75,7 +75,9 @@ export default function ExcaliburPanel({ room, onView, onDecide, onForceDecline 
       {isHolder && !viewing && (
         <>
           <div className="avatar-grid">
-            {game.proposedTeam.map((seat) => {
+            {/* Never yourself -- Excalibur can't be used on your own card, same
+                restriction as the leader not being able to hold it themselves. */}
+            {game.proposedTeam.filter((seat) => seat !== you.seat).map((seat) => {
               const p = players.find((pl) => pl.seat === seat);
               return (
                 <PlayerAvatar

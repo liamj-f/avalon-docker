@@ -381,6 +381,11 @@ backend/
     003_force_advance_leader.sql  # sp_force_advance_leader -- added after 001+002 already
                                    # shipped, so this is a real incremental migration, not
                                    # folded into the baseline (see the migration runner note above)
+    004_excalibur_no_self_target.sql      # sp_excalibur_view: the holder may no longer target their own card
+    005_lancelot_pair_up_to_two_swaps.sql # the pair's swap can now land twice (see the design note below);
+                                           # replaces the single swap_mission_number/lancelots_swapped pair
+                                           # with swap_mission_numbers[]/lancelots_swap_count -- same
+                                           # leave-the-old-column-in-place approach as pending_fail_count
 frontend/
   src/
     pages/            # Home, Lobby, Game
@@ -601,6 +606,11 @@ that already had one). The real expansion rule, as implemented today:
   and is required whenever Excalibur is enabled and unspent — the frontend
   mirrors this in `TeamBuilder`'s `canPropose` gating, but the database is
   what actually enforces it.
+- **Never on your own card**: same restriction as the leader not being able
+  to hold Excalibur themselves, just enforced at the other end of the
+  flow — `sp_excalibur_view` rejects `p_target_seat = p_seat` outright
+  (migration `004_excalibur_no_self_target.sql`), and `ExcaliburPanel`
+  doesn't even offer the holder's own seat as a pickable target.
 
 ### Design note: Agravain
 
@@ -636,14 +646,22 @@ this build picks one clean interpretation per mode and documents it:
   remaining Reverse card flip the quest's outcome — see the Excalibur
   design note above for exactly why that ordering was chosen.
 - **Good & Evil Lancelot pair** (`lancelotPair`): two separate Lancelot
-  seats, one dealt Good and one dealt Evil. At a mission number chosen
-  secretly at random when the game starts (`games.swap_mission_number`),
-  the instant that mission resolves — win or lose — the two silently swap
-  allegiance for the rest of the game (`_resolve_mission` in
-  `002_procedures.sql`). Both appear to Merlin as Evil
-  regardless of their current, real team. Knowledge granted at deal time
-  (who evil teammates see, etc.) is **not** retroactively recomputed after
-  a swap — only `team`, which every live rule check reads fresh from
+  seats, one dealt Good and one dealt Evil. At 1 or 2 mission numbers
+  chosen secretly at random when the game starts (`games.
+  swap_mission_numbers` — never zero, never more than two), the instant
+  each scheduled mission resolves — win or lose — the two silently swap
+  allegiance for the rest of the game, or back again if it's the second
+  landed swap (`_resolve_mission` in `002_procedures.sql`, toggling off
+  each Lancelot's *current* team rather than a fixed role-keyed
+  assignment, precisely so a second swap really does flip it back).
+  Only the genuinely-Evil-*at-deal-time* half appears to Merlin as Evil —
+  the swap itself isn't reflected in Merlin's one-time reveal (see below).
+  Evil Lancelot also doesn't see the rest of Evil the way a regular evil
+  role would — one-way, unlike Oberon's mutual blindness: the rest of Evil
+  still sees *them* (so they know who the pair's Evil half secretly is),
+  Evil Lancelot just isn't shown anyone back. Knowledge granted at deal
+  time (who evil teammates see, etc.) is **not** retroactively recomputed
+  after a swap — only `team`, which every live rule check reads fresh from
   Postgres, actually changes. This is a deliberate simplification, not an
   oversight: modeling "what would Merlin have learned if the swap had
   already happened" would require re-deriving knowledge live, which adds
