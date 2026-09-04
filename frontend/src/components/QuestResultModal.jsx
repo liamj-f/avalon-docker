@@ -44,6 +44,12 @@ export default function QuestResultModal({ result, players, onClose }) {
           </p>
         )}
 
+        {result.lancelotsSwapped && (
+          <p className="quest-result-lancelot-swap">
+            🔀 The Lancelots have swapped allegiance — nobody knows who's who now.
+          </p>
+        )}
+
         <button type="button" className="btn btn-primary" onClick={onClose}>
           Dismiss
         </button>
