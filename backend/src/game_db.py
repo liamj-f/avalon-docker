@@ -41,7 +41,7 @@ async def start_game(
     leader_seat: int,
     lady_holder_seat: int | None,
     excalibur_holder_seat: int | None,
-    swap_mission_number: int | None,
+    swap_mission_numbers: list[int] | None,
     players: list[dict[str, Any]],
 ) -> UUID:
     """Persists a freshly-dealt game and its initial turn state. Returns the new games.id."""
@@ -54,7 +54,7 @@ async def start_game(
         leader_seat,
         lady_holder_seat,
         excalibur_holder_seat,
-        swap_mission_number,
+        swap_mission_numbers,
         players,
     )
 
@@ -229,9 +229,13 @@ async def load_game_state_for_seat(game_id: UUID, seat: int | None) -> dict[str,
         "excaliburUsed": g["excalibur_used"],
         # Whether Lancelot's Reverse card / the paired Lancelots' swap have
         # happened is safe to broadcast to everyone: it never says who's
-        # involved, just that the event occurred.
+        # involved, just that the event occurred. lancelotsSwapped stays a
+        # plain boolean (has it swapped at least once) rather than exposing
+        # the actual count -- "twice" would tell the table the pair is back
+        # to their original allegiance, which is more than the base rule's
+        # "just that the event occurred" is meant to leak.
         "lancelotReverseUsed": g["lancelot_reverse_used"] if settings.get("lancelot") else None,
-        "lancelotsSwapped": g["lancelots_swapped"] if settings.get("lancelotPair") else None,
+        "lancelotsSwapped": (g["lancelots_swap_count"] > 0) if settings.get("lancelotPair") else None,
     }
 
     public_reveals = await pool.fetch(

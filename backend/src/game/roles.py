@@ -336,6 +336,13 @@ def compute_knowledge(assignments: list[RoleAssignment]) -> dict[int, list[dict[
     lancelot_good = by_role.get("LANCELOT_GOOD")
     lancelot_evil = by_role.get("LANCELOT_EVIL")
     evil_non_oberon = [a for a in assignments if a.team == "evil" and a.role_id != "OBERON"]
+    # Evil Lancelot is visible *to* the rest of Evil (they're still one of
+    # evil_non_oberon above, so everyone else's knowledge list below
+    # includes them, labeled same as any other Evil role) but doesn't see
+    # back -- one-way, unlike Oberon's fully mutual blindness. Represents
+    # that only the *other* evils are let in on which seat is secretly
+    # going to swap sides later; Evil Lancelot themselves gets nothing here.
+    evil_seers = [a for a in evil_non_oberon if a.role_id != "LANCELOT_EVIL"]
 
     if merlin:
         # Evil (minus Mordred) is Merlin's usual sight. Solo Lancelot is a
@@ -351,7 +358,7 @@ def compute_knowledge(assignments: list[RoleAssignment]) -> dict[int, list[dict[
         seen_as_evil |= {a.seat for a in assignments if a.role_id == "LANCELOT"}
         knowledge[merlin.seat] = [{"seat": a.seat, "label": "Evil"} for a in assignments if a.seat in seen_as_evil]
 
-    for a in evil_non_oberon:
+    for a in evil_seers:
         others = [o for o in evil_non_oberon if o.seat != a.seat]
         knowledge[a.seat] = [{"seat": o.seat, "label": ROLES[o.role_id]["name"]} for o in others]
 

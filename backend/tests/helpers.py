@@ -48,7 +48,7 @@ async def start_game(
     leader_seat: int = 0,
     lady_holder_seat: int | None = None,
     excalibur_holder_seat: int | None = None,
-    swap_mission_number: int | None = None,
+    swap_mission_numbers: list[int] | None = None,
 ) -> UUID:
     """roles: {seat: (roleId, team)}. Any seat not given one defaults to a
     plain Loyal Servant. Returns the new game's id."""
@@ -67,7 +67,7 @@ async def start_game(
         leader_seat,
         lady_holder_seat,
         excalibur_holder_seat,
-        swap_mission_number,
+        swap_mission_numbers,
         players,
     )
 

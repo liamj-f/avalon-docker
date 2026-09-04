@@ -245,6 +245,22 @@ def test_evil_sees_each_other_except_oberon():
     assert knowledge[2] == []  # Oberon sees nobody
 
 
+def test_evil_lancelot_visible_to_rest_of_evil_but_sees_nobody_back():
+    # One-way, unlike Oberon's mutual blindness: the rest of Evil is let in
+    # on who's secretly going to swap sides later, but Evil Lancelot
+    # themselves gets nothing -- they can't give away teammates they were
+    # never shown.
+    assignments = _assignment([
+        (0, "MORGANA"), (1, "LANCELOT_EVIL"), (2, "MINION"), (3, "LOYAL_SERVANT"), (4, "LANCELOT_GOOD"),
+    ])
+    knowledge = compute_knowledge(assignments)
+    morgana_sees = {k["seat"] for k in knowledge[0]}
+    minion_sees = {k["seat"] for k in knowledge[2]}
+    assert 1 in morgana_sees  # rest of Evil still sees the Evil-starting Lancelot
+    assert 1 in minion_sees
+    assert knowledge[1] == []  # but Evil Lancelot sees no one, including Morgana/the Minion
+
+
 def test_percival_sees_only_merlin_when_morgana_absent():
     assignments = _assignment([(0, "PERCIVAL"), (1, "MERLIN"), (2, "LOYAL_SERVANT")])
     knowledge = compute_knowledge(assignments)
