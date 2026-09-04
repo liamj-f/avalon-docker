@@ -43,9 +43,27 @@ export default function Game() {
     submitExcaliburDecision,
     forceDeclineExcalibur,
     setMuted,
+    leaveRoom,
   } = useGame();
   const { room } = state;
   const { game } = room;
+
+  // Unlike Lobby's Leave (freely rejoinable -- there's no game to lose),
+  // leaving mid-game is permanent: room:leave marks the seat disconnected
+  // for good rather than freeing it (see Room.remove_player), and the
+  // client also drops its own token immediately below, so there's no
+  // token left to rejoin with even if the player changed their mind.
+  // Worth an explicit confirm, same as every other irreversible
+  // mid-game action (StuckPhaseNotice's force-resolve buttons).
+  const handleLeaveGame = () => {
+    if (
+      window.confirm(
+        'Leave this game? Your seat stays in play and the host can force it through the same way as any other disconnect, but you will not be able to rejoin.'
+      )
+    ) {
+      leaveRoom();
+    }
+  };
 
   // room.you carries identity (name/host/token); game.you carries the
   // in-game secret (role/team/knowledge/etc). Merge them so child
@@ -85,10 +103,15 @@ export default function Game() {
       <div className="game-main">
         <div className="card">
           <div className="phase-badge-row">
-            <span className="phase-badge">{PHASE_LABEL[game.phase]}</span>
-            <span className="hint" title={QUEST_FLAVOR[Math.min(game.missionNumber, 4)].blurb}>
-              Quest {Math.min(game.missionNumber + 1, 5)} of 5 · {QUEST_FLAVOR[Math.min(game.missionNumber, 4)].name}
-            </span>
+            <div className="phase-badge-group">
+              <span className="phase-badge">{PHASE_LABEL[game.phase]}</span>
+              <span className="hint" title={QUEST_FLAVOR[Math.min(game.missionNumber, 4)].blurb}>
+                Quest {Math.min(game.missionNumber + 1, 5)} of 5 · {QUEST_FLAVOR[Math.min(game.missionNumber, 4)].name}
+              </span>
+            </div>
+            <button type="button" className="btn btn-ghost btn-small" onClick={handleLeaveGame}>
+              Leave Game
+            </button>
           </div>
           <MissionTrack game={game} onSelectQuest={setOpenQuestNumber} />
           <div className="avatar-legend">

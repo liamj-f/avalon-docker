@@ -254,7 +254,27 @@ def create_socket_server(room_manager: RoomManager) -> tuple[socketio.AsyncServe
         await broadcast_room(room)
 
     async def handle_room_leave(room: Room, player, _data: dict[str, Any]) -> None:
+        # In the lobby, Room.remove_player pops the seat out of
+        # room.players entirely -- do_broadcast's `for p in
+        # room.players.values()` loop naturally never targets this token
+        # again, socket still technically open or not. Mid-game it can't
+        # do that (the seat has to stay for the game to make sense -- see
+        # remove_player's docstring); it only flips connected=False, so
+        # the leaving player is still very much in room.players when
+        # broadcast_room runs below. Disconnecting BEFORE broadcasting
+        # (unlike handle_kick_player, which can broadcast first because
+        # kick is lobby-only and the kicked seat is already gone from
+        # room.players by then) matters here: emit() only reaches sockets
+        # actually still joined to _player_room(token) at the moment it's
+        # called, so this ordering is what stops this last, real
+        # broadcast -- reflecting a game the leaver just chose to leave --
+        # from landing on their own still-open socket and overwriting the
+        # frontend's own LEFT action (which already cleared their local
+        # room state) right back to the game view the instant it fires.
+        leaving_sid = player.socket_id
         room_manager.leave_room(player.token)
+        if leaving_sid:
+            await sio.disconnect(leaving_sid)
         await broadcast_room(room)
 
     async def handle_kick_player(room: Room, player, data: dict[str, Any]) -> None:
