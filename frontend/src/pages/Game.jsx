@@ -106,7 +106,6 @@ export default function Game() {
               {excaliburHolder && (
                 <span className="extension-badge">
                   ⚔️ Excalibur: <strong>{excaliburHolder.displayName}</strong>
-                  {game.excaliburUsed && ' (spent)'}
                 </span>
               )}
             </div>

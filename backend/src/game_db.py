@@ -236,10 +236,11 @@ async def load_game_state_for_seat(game_id: UUID, seat: int | None) -> dict[str,
         # used; Excalibur's is re-assigned by each quest's leader as part of
         # proposing the team (sp_propose_team) and stays that way through
         # team_voting/mission/excalibur_decision for the current quest, null
-        # otherwise (not yet (re-)assigned, or already spent for good).
+        # otherwise (not yet (re-)assigned this round -- there's no
+        # game-wide "spent for good" anymore, it's reassigned every round;
+        # see migration 006).
         "ladyHolderSeat": g["lady_holder_seat"] if settings.get("ladyOfLake") else None,
         "excaliburHolderSeat": g["excalibur_holder_seat"] if settings.get("excalibur") else None,
-        "excaliburUsed": g["excalibur_used"],
         # Whether Lancelot's Reverse card / the paired Lancelots' swap have
         # happened is safe to broadcast to everyone: it never says who's
         # involved, just that the event occurred. This is the "as of right

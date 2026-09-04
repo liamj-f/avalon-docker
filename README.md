@@ -28,8 +28,8 @@ of truth for every game in progress — not just a history log.
   missions 2/3/4, then passes to whoever was examined) and **Excalibur**
   (each quest's leader hands it to someone else on that team before the
   vote; once the quest's cards are in, the holder picks one participant to
-  see their real card, then may flip it, once per game), both toggleable
-  from the lobby alongside the core roles.
+  see their real card, then may flip it — every round, no game-wide
+  limit), both toggleable from the lobby alongside the core roles.
 - **Arthurian quest flavor**: each of the 5 quests carries a themed name —
   The Round Table, Camelot, The Holy Grail, Camlann, The Isle of Avalon —
   shown next to the quest counter and on its result.
@@ -386,6 +386,9 @@ backend/
                                            # replaces the single swap_mission_number/lancelots_swapped pair
                                            # with swap_mission_numbers[]/lancelots_swap_count -- same
                                            # leave-the-old-column-in-place approach as pending_fail_count
+    006_excalibur_every_round.sql         # corrects Excalibur to have no game-wide limit -- reusable
+                                           # every round, not single-use for the whole game (see the
+                                           # design note below); games.excalibur_used left unused in place
 frontend/
   src/
     pages/            # Home, Lobby, Game
@@ -574,9 +577,13 @@ that already had one). The real expansion rule, as implemented today:
   flipped by it as the very last step; if Excalibur converted it to a plain
   Success/Fail, there's no card left to flip and the mission resolves on
   the (now-final) real tally.
-- **Single-use, forever**: spending it clears `games.excalibur_holder_seat`
-  and sets `games.excalibur_used = true` for the rest of the game, same as
-  before — just now assigned per-quest instead of fixed at game start.
+- **Reusable every round, no game-wide limit**: deciding (use or decline)
+  clears `games.excalibur_holder_seat`/`excalibur_viewing_seat` so the
+  *next* quest's leader assigns it fresh — same token, indefinitely, not a
+  single-use item. (An earlier version of this build made it single-use
+  for the whole game; that was a mistake, corrected in migration
+  `006_excalibur_every_round.sql`. `games.excalibur_used` is left in the
+  schema, unused, rather than dropped.)
 - **Transparency**: once a quest resolves, everyone learns who held
   Excalibur, who they *viewed*, and whether they used it on them
   (`missionResults[].excaliburHolderSeat`/`excaliburTargetSeat`/
@@ -603,9 +610,9 @@ that already had one). The real expansion rule, as implemented today:
   holder/target pair themselves.
 - Excalibur assignment is validated server-side (`sp_propose_team`): the
   designated holder must be on the proposed team, must not be the leader,
-  and is required whenever Excalibur is enabled and unspent — the frontend
-  mirrors this in `TeamBuilder`'s `canPropose` gating, but the database is
-  what actually enforces it.
+  and is required every round Excalibur is enabled, full stop — the
+  frontend mirrors this in `TeamBuilder`'s `canPropose` gating, but the
+  database is what actually enforces it.
 - **Never on your own card**: same restriction as the leader not being able
   to hold Excalibur themselves, just enforced at the other end of the
   flow — `sp_excalibur_view` rejects `p_target_seat = p_seat` outright
@@ -936,18 +943,20 @@ against a real local Postgres 16 and the real backend process (not mocks):
 - **Excalibur (full rework)**: verified over real Socket.IO clients plus
   direct `psql` role-forcing (to deterministically reach the rare
   Lancelot+Excalibur interaction, since normal role dealing is random):
-  proposing a team without designating a holder (while Excalibur is active
-  and unspent) is rejected; designating the leader themselves, or someone
-  not on the proposed team, is rejected; the decision phase now triggers on
-  *every* quest once a holder is assigned, not just ones with a Fail
-  already in; declining without ever viewing is rejected (`sp_excalibur_decision`
-  requires a prior `sp_excalibur_view`); viewing reveals *only* the chosen
-  seat's real card, never the rest of the team's; viewing a second seat in
-  the same quest is rejected; flipping a Success to Fail (and vice versa)
-  updates `mission_cards` and the mission's effective result correctly;
-  declining leaves the quest's cards untouched, but the missionResults
-  entry still records who was viewed; using it is correctly rejected a
-  second time in the same game once already spent; and transparency holds
+  proposing a team without designating a holder (while Excalibur is
+  enabled) is rejected; designating the leader themselves, someone not on
+  the proposed team, or the holder's own seat as the view target, is
+  rejected; the decision phase triggers on *every* quest once a holder is
+  assigned, not just ones with a Fail already in; declining without ever
+  viewing is rejected (`sp_excalibur_decision` requires a prior
+  `sp_excalibur_view`); viewing reveals *only* the chosen seat's real card,
+  never the rest of the team's; viewing a second seat in the same quest is
+  rejected; flipping a Success to Fail (and vice versa) updates
+  `mission_cards` and the mission's effective result correctly; declining
+  leaves the quest's cards untouched, but the missionResults entry still
+  records who was viewed; using it on one quest doesn't stop the next
+  quest's leader from assigning and using it again (see the design note
+  above — there is no game-wide limit); and transparency holds
   exactly as specified — bystanders see holder/viewed-target/used after the
   fact but never the target's original card, while the holder and target's
   own `you.excaliburReveals` correctly includes it (whether or not it was

@@ -8,7 +8,7 @@ export default function TeamBuilder({ room, onPropose, onForceAdvanceLeader }) {
   const isLeader = you.seat === game.leaderSeat;
   const [selected, setSelected] = useState([]);
   const [excaliburSeat, setExcaliburSeat] = useState(null);
-  const needsExcalibur = game.hasExcalibur && !game.excaliburUsed;
+  const needsExcalibur = game.hasExcalibur;
 
   // Unlike the other stuck-phase notices, this doesn't need to check
   // "has anyone actually acted yet" -- there's no partial state at

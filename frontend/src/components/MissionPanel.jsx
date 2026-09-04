@@ -7,7 +7,7 @@ export default function MissionPanel({ room, onPlayCard, onForceResolve }) {
   const onTeam = game.proposedTeam.includes(you.seat);
   const proposedSet = new Set(game.proposedTeam);
   const canReverse = you.roleId === 'LANCELOT' && you.hasReverseCard;
-  const excaliburHolderSeat = game.hasExcalibur && !game.excaliburUsed ? game.excaliburHolderSeat : null;
+  const excaliburHolderSeat = game.hasExcalibur ? game.excaliburHolderSeat : null;
 
   // Only surfaced once there's an actual reason to reach for it -- the
   // quest is still short cards and at least one of the missing seats is

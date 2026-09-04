@@ -6,7 +6,7 @@ export default function VotePanel({ room, onVote, onForceResolve }) {
   const { game, players, you } = room;
   const proposedSet = new Set(game.proposedTeam);
   const leader = players.find((p) => p.seat === game.leaderSeat);
-  const excaliburHolder = game.hasExcalibur && !game.excaliburUsed && players.find((p) => p.seat === game.excaliburHolderSeat);
+  const excaliburHolder = game.hasExcalibur && players.find((p) => p.seat === game.excaliburHolderSeat);
   // Same shape as MissionPanel's stuck-quest notice: nobody knows who
   // specifically hasn't voted yet (in-progress choices are secret), so this
   // just checks whether *anyone* is disconnected -- sp_force_resolve_team_vote
