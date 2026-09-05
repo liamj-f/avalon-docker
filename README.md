@@ -377,18 +377,16 @@ backend/
     001_schema.sql        # every table: games, game_players, game_missions, team_proposals,
                            # team_votes, mission_cards, lady_of_lake_events, excalibur_events,
                            # mission_config
-    002_procedures.sql     # the actual game engine, as PL/pgSQL stored procedures
-    003_force_advance_leader.sql  # sp_force_advance_leader -- added after 001+002 already
-                                   # shipped, so this is a real incremental migration, not
-                                   # folded into the baseline (see the migration runner note above)
-    004_excalibur_no_self_target.sql      # sp_excalibur_view: the holder may no longer target their own card
-    005_lancelot_pair_up_to_two_swaps.sql # the pair's swap can now land twice (see the design note below);
-                                           # replaces the single swap_mission_number/lancelots_swapped pair
-                                           # with swap_mission_numbers[]/lancelots_swap_count -- same
-                                           # leave-the-old-column-in-place approach as pending_fail_count
-    006_excalibur_every_round.sql         # corrects Excalibur to have no game-wide limit -- reusable
-                                           # every round, not single-use for the whole game (see the
-                                           # design note below); games.excalibur_used left unused in place
+    002_procedures.sql     # the actual game engine, as PL/pgSQL stored procedures -- squashed
+                            # back into this baseline (was briefly 003-006 as separate migrations:
+                            # sp_force_advance_leader, Excalibur's no-self-target rule and no
+                            # game-wide limit, the paired Lancelots' up-to-twice swap) now that
+                            # there's no existing database's schema_migrations bookkeeping left to
+                            # stay compatible with -- re-squashing only ever makes sense against a
+                            # fresh install for exactly that reason (a database that already ran
+                            # e.g. 004_excalibur_no_self_target.sql under its old filename would
+                            # just skip 002_procedures.sql's version of that same fix, since as far
+                            # as schema_migrations is concerned "002_procedures.sql" already ran)
 frontend/
   src/
     pages/            # Home, Lobby, Game
@@ -581,9 +579,8 @@ that already had one). The real expansion rule, as implemented today:
   clears `games.excalibur_holder_seat`/`excalibur_viewing_seat` so the
   *next* quest's leader assigns it fresh — same token, indefinitely, not a
   single-use item. (An earlier version of this build made it single-use
-  for the whole game; that was a mistake, corrected in migration
-  `006_excalibur_every_round.sql`. `games.excalibur_used` is left in the
-  schema, unused, rather than dropped.)
+  for the whole game, tracked by a now-removed `games.excalibur_used`
+  column — that was a mistake.)
 - **Transparency**: once a quest resolves, everyone learns who held
   Excalibur, who they *viewed*, and whether they used it on them
   (`missionResults[].excaliburHolderSeat`/`excaliburTargetSeat`/
@@ -615,9 +612,9 @@ that already had one). The real expansion rule, as implemented today:
   database is what actually enforces it.
 - **Never on your own card**: same restriction as the leader not being able
   to hold Excalibur themselves, just enforced at the other end of the
-  flow — `sp_excalibur_view` rejects `p_target_seat = p_seat` outright
-  (migration `004_excalibur_no_self_target.sql`), and `ExcaliburPanel`
-  doesn't even offer the holder's own seat as a pickable target.
+  flow — `sp_excalibur_view` rejects `p_target_seat = p_seat` outright,
+  and `ExcaliburPanel` doesn't even offer the holder's own seat as a
+  pickable target.
 
 ### Design note: Agravain
 

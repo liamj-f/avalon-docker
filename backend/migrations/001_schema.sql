@@ -52,20 +52,16 @@ CREATE TABLE games (
     leader_seat SMALLINT,
     rejection_count SMALLINT NOT NULL DEFAULT 0,
     proposed_team SMALLINT[],
-    -- No longer written since Excalibur's rework (the holder now sees a
-    -- real card, not a fail count -- see sp_excalibur_view/_decision in
-    -- 002_procedures.sql) -- left in place rather than dropped, since
-    -- nothing reads it either and it's zero-risk to just leave unused.
-    pending_fail_count SMALLINT,
 
     -- Lady of the Lake (both tokens below are public — who holds them is
     -- visible at the table; only what a holder learns is private)
     lady_holder_seat SMALLINT,
     lady_history SMALLINT[] NOT NULL DEFAULT '{}',
 
-    -- Excalibur
+    -- Excalibur: re-assigned by each quest's leader as part of proposing
+    -- the team (sp_propose_team) -- reusable every round, no game-wide
+    -- limit (see sp_excalibur_decision).
     excalibur_holder_seat SMALLINT,
-    excalibur_used BOOLEAN NOT NULL DEFAULT false,
     -- Set by sp_excalibur_view, cleared by sp_excalibur_decision -- tracks
     -- which of this quest's participants the holder has committed to
     -- looking at (they only ever get to see one card, so this also guards
@@ -73,10 +69,13 @@ CREATE TABLE games (
     excalibur_viewing_seat SMALLINT,
 
     -- Lancelot: solo mode's single-use Reverse card, and the paired mode's
-    -- secretly-predetermined automatic swap
+    -- secretly-predetermined automatic swap(s) -- 1 or 2 distinct mission
+    -- numbers chosen once at deal time (rooms.py), never revealed ahead of
+    -- time; each one reached flips the pair's allegiance again (see
+    -- _resolve_mission).
     lancelot_reverse_used BOOLEAN NOT NULL DEFAULT false,
-    swap_mission_number SMALLINT,
-    lancelots_swapped BOOLEAN NOT NULL DEFAULT false,
+    swap_mission_numbers SMALLINT[],
+    lancelots_swap_count SMALLINT NOT NULL DEFAULT 0,
 
     -- Assassination -- an array since the Assassin's guess is either one
     -- seat (Merlin/Gawain) or two (the Tristan & Iseult pair), or empty
