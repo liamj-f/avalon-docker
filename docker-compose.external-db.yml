@@ -55,7 +55,9 @@ services:
     ports:
       - "${FRONTEND_PORT:-8080}:80"
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost/"]
+      # /healthz (not /) so this never shows up in nginx's access log
+      # alongside real page loads -- see nginx.conf.template.
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -41,6 +41,15 @@ server {
         proxy_read_timeout 3600s;
     }
 
+    # Docker's healthcheck (docker-compose*.yml) polls this every 10s --
+    # a dedicated path rather than reusing `/` means it's never mixed in
+    # with real page-load traffic in the access log, so access_log off
+    # here silences only the healthcheck spam, not actual visits.
+    location = /healthz {
+        access_log off;
+        return 200;
+    }
+
     # Service worker + manifest (see vite.config.js's VitePWA block) --
     # explicitly uncached so the browser always revalidates before using
     # either, rather than a long-lived HTTP cache delaying players from

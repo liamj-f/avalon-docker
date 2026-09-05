@@ -71,7 +71,9 @@ services:
       - "${FRONTEND_PORT:-8080}:80"
     healthcheck:
       # nginx:1.27-alpine has no curl, but alpine's busybox wget is built in.
-      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost/"]
+      # /healthz (not /) so this never shows up in nginx's access log
+      # alongside real page loads -- see nginx.conf.template.
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5

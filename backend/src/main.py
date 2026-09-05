@@ -42,6 +42,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger("avalon.server")
 
+
+class _HealthCheckAccessFilter(logging.Filter):
+    """Docker's healthcheck (docker-compose*.yml) polls /api/health every
+    10s -- uvicorn's own access logger (a separate logger from everything
+    above, with its own handler attached during startup, not one of
+    _log_handlers) would otherwise log every single one of those at INFO,
+    burying real request logs under a constant drip of healthcheck noise.
+    Filters by the formatted message rather than parsing record.args --
+    uvicorn's access log record shape isn't a stable public API, but every
+    version puts the request path in the rendered message somewhere."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/api/health" not in record.getMessage()
+
 PORT = int(os.environ.get("PORT", "4000"))
 CORS_ORIGIN = os.environ.get("CORS_ORIGIN", "*")
 REAP_INTERVAL_SECONDS = 30 * 60
@@ -121,6 +135,12 @@ async def main() -> None:
         forwarded_allow_ips="*",
     )
     server = uvicorn.Server(config)
+    # uvicorn.Server.__init__ -> Config.load() has already run
+    # configure_logging() by this point, attaching its own console handler
+    # to "uvicorn.access" -- adding the filter only now (rather than at
+    # module import time, before that handler exists) means it survives
+    # uvicorn's own logging setup instead of being wiped by it.
+    logging.getLogger("uvicorn.access").addFilter(_HealthCheckAccessFilter())
     logger.info("[server] Avalon backend listening on :%s", PORT)
     await server.serve()
 
