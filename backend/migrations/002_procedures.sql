@@ -24,10 +24,10 @@ CREATE OR REPLACE FUNCTION sp_start_game(
     p_settings JSONB,
     p_seat_order INT[],
     p_leader_seat INT,
-    p_lady_holder_seat INT,      -- NULL if Lady of the Lake is off
-    p_excalibur_holder_seat INT, -- NULL if Excalibur is off
-    p_swap_mission_number INT,   -- NULL unless the paired Lancelots are in play
-    p_players JSONB              -- [{seat, displayName, roleId, team, knowledge}, ...]
+    p_lady_holder_seat INT,       -- NULL if Lady of the Lake is off
+    p_excalibur_holder_seat INT,  -- NULL if Excalibur is off
+    p_swap_mission_numbers INT[], -- NULL unless the paired Lancelots are in play; 1 or 2 distinct mission numbers
+    p_players JSONB               -- [{seat, displayName, roleId, team, knowledge}, ...]
 ) RETURNS UUID AS $$
 DECLARE
     new_game_id UUID;
@@ -35,10 +35,10 @@ DECLARE
 BEGIN
     INSERT INTO games (
         room_code, player_count, settings, seat_order, leader_seat,
-        lady_holder_seat, excalibur_holder_seat, swap_mission_number, phase, started_at
+        lady_holder_seat, excalibur_holder_seat, swap_mission_numbers, phase, started_at
     ) VALUES (
         p_room_code, array_length(p_seat_order, 1), p_settings, p_seat_order, p_leader_seat,
-        p_lady_holder_seat, p_excalibur_holder_seat, p_swap_mission_number, 'team_building', now()
+        p_lady_holder_seat, p_excalibur_holder_seat, p_swap_mission_numbers, 'team_building', now()
     ) RETURNING id INTO new_game_id;
 
     FOR p IN SELECT * FROM jsonb_array_elements(p_players) LOOP
@@ -52,9 +52,10 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- p_excalibur_seat: the OTHER player (never the leader) on this team the
--- leader is designating to hold Excalibur for this quest -- required iff
--- Excalibur is enabled and not yet spent for the game, ignored otherwise.
--- Visible to everyone before they vote on the team.
+-- leader is designating to hold Excalibur for this quest -- required
+-- every round Excalibur is enabled (no game-wide limit -- see
+-- sp_excalibur_decision), ignored otherwise. Visible to everyone before
+-- they vote on the team.
 CREATE OR REPLACE FUNCTION sp_propose_team(
     p_game_id UUID, p_leader_seat INT, p_team INT[],
     p_excalibur_seat INT DEFAULT NULL
@@ -81,7 +82,7 @@ BEGIN
         RAISE EXCEPTION 'Team includes an unknown seat.';
     END IF;
 
-    excalibur_active := (g.settings->>'excalibur')::boolean AND NOT g.excalibur_used;
+    excalibur_active := (g.settings->>'excalibur')::boolean;
     IF excalibur_active THEN
         IF p_excalibur_seat IS NULL THEN
             RAISE EXCEPTION 'Choose who holds Excalibur for this quest.';
@@ -101,6 +102,33 @@ BEGIN
 
     UPDATE games SET proposed_team = p_team, phase = 'team_voting', excalibur_holder_seat = p_excalibur_seat
         WHERE id = p_game_id;
+    PERFORM pg_notify('avalon_game_updates', p_game_id::text);
+END;
+$$ LANGUAGE plpgsql;
+
+-- A disconnected leader previously stalled the game forever at
+-- team-building: unlike the other force-resolve escape hatches, there's
+-- nothing here to fill in on the missing player's behalf -- nobody
+-- proposes a team *for* them, since there's no charitable default for who
+-- someone else would have put on it. The only fair way out is skipping
+-- their turn as leader entirely, the same as a real player passing the
+-- conch to whoever's next. Deliberately does NOT touch rejection_count --
+-- that track (and the 5-rejections-in-a-row auto-loss it drives) is
+-- specifically about proposals the table actually voted down, not turns
+-- skipped because a seat was unreachable, so this can never end the game
+-- by itself. Only valid before a team's been proposed this turn (once
+-- proposed, phase is already team_voting, and a stuck leader from here on
+-- is sp_force_resolve_team_vote's job instead).
+CREATE OR REPLACE FUNCTION sp_force_advance_leader(p_game_id UUID)
+RETURNS VOID AS $$
+DECLARE
+    g games%ROWTYPE;
+BEGIN
+    SELECT * INTO g FROM games WHERE id = p_game_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Game not found.'; END IF;
+    IF g.phase <> 'team_building' THEN RAISE EXCEPTION 'Not waiting on a team proposal.'; END IF;
+
+    UPDATE games SET leader_seat = _next_seat(g.seat_order, g.leader_seat) WHERE id = p_game_id;
     PERFORM pg_notify('avalon_game_updates', p_game_id::text);
 END;
 $$ LANGUAGE plpgsql;
@@ -267,10 +295,11 @@ BEGIN
     END IF;
 
     -- Excalibur looks at *every* quest (not just ones that already came
-    -- back with a Fail) as long as it's assigned and unspent -- the holder
-    -- can flip any one participant's card either direction, not just
-    -- cleanse a Fail. See sp_excalibur_view/sp_excalibur_decision.
-    IF (g.settings->>'excalibur')::boolean AND g.excalibur_holder_seat IS NOT NULL AND NOT g.excalibur_used THEN
+    -- back with a Fail) as long as it's assigned this round -- available
+    -- every round, no game-wide limit -- the holder can flip any one
+    -- participant's card either direction, not just cleanse a Fail. See
+    -- sp_excalibur_view/sp_excalibur_decision.
+    IF (g.settings->>'excalibur')::boolean AND g.excalibur_holder_seat IS NOT NULL THEN
         UPDATE games SET phase = 'excalibur_decision' WHERE id = p_game_id;
     ELSE
         SELECT COUNT(*) FILTER (WHERE NOT success AND NOT reversed) INTO fail_count
@@ -284,7 +313,9 @@ $$ LANGUAGE plpgsql;
 
 -- The holder picks ONE participant to look at, sees only that card, and
 -- only then decides (sp_excalibur_decision) whether to swap it -- they
--- don't get to browse everyone's card first.
+-- don't get to browse everyone's card first. Never on their own card --
+-- same restriction as the leader not being able to hold Excalibur
+-- themselves, just enforced at the other end of the flow.
 CREATE OR REPLACE FUNCTION sp_excalibur_view(p_game_id UUID, p_seat INT, p_target_seat INT)
 RETURNS VOID AS $$
 DECLARE
@@ -294,6 +325,7 @@ BEGIN
     IF NOT FOUND THEN RAISE EXCEPTION 'Game not found.'; END IF;
     IF g.phase <> 'excalibur_decision' THEN RAISE EXCEPTION 'Not in the Excalibur decision phase.'; END IF;
     IF g.excalibur_holder_seat <> p_seat THEN RAISE EXCEPTION 'Only the Excalibur holder may view a card.'; END IF;
+    IF p_target_seat = p_seat THEN RAISE EXCEPTION 'Excalibur cannot be used on your own card -- pick someone else on the quest.'; END IF;
     IF g.excalibur_viewing_seat IS NOT NULL THEN
         RAISE EXCEPTION 'You have already viewed a card this quest.';
     END IF;
@@ -353,12 +385,11 @@ BEGIN
         target_card.success, target_card.reversed, CASE WHEN p_use THEN v_new_success ELSE NULL END
     );
 
-    -- Single legendary use per game: spent once, gone for good. Declining
-    -- doesn't spend it -- the *next* quest's leader assigns it again
-    -- (sp_propose_team) -- but either way this quest's holder/viewing state
+    -- Reusable every round, no game-wide limit -- the *next* quest's
+    -- leader assigns it fresh (sp_propose_team) whether this quest's
+    -- holder used it or not; either way this quest's holder/viewing state
     -- is cleared so it doesn't linger as a stale display between quests.
-    UPDATE games SET excalibur_used = excalibur_used OR p_use,
-                      excalibur_holder_seat = NULL,
+    UPDATE games SET excalibur_holder_seat = NULL,
                       excalibur_viewing_seat = NULL
         WHERE id = p_game_id;
 
@@ -414,10 +445,10 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Shared tail end of a mission: record the result (after any Lancelot
--- Reverse flip), apply the paired Lancelots' scheduled swap if this is the
--- mission it lands on, check both win conditions, and figure out the next
--- phase (Lady of the Lake, the assassination, or straight back to
--- team-building).
+-- Reverse flip), apply the paired Lancelots' scheduled swap(s) if this is
+-- one of the missions they land on, check both win conditions, and figure
+-- out the next phase (Lady of the Lake, the assassination, or straight
+-- back to team-building).
 CREATE OR REPLACE FUNCTION _resolve_mission(p_game_id UUID, p_fail_count INT)
 RETURNS VOID AS $$
 DECLARE
@@ -447,12 +478,19 @@ BEGIN
     VALUES (p_game_id, g.mission_number, v_team_size, v_required, to_jsonb(g.proposed_team), v_result, p_fail_count);
 
     -- Paired Lancelots: an automatic, secretly-predetermined swap, unrelated
-    -- to any player choice. Applies as soon as its scheduled mission
+    -- to any player choice. Applies as soon as a scheduled mission
     -- finishes, win or lose, so it can even land on the deciding mission.
-    IF NOT g.lancelots_swapped AND g.swap_mission_number IS NOT NULL AND g.mission_number = g.swap_mission_number THEN
-        UPDATE game_players SET team = CASE role WHEN 'LANCELOT_GOOD' THEN 'evil' WHEN 'LANCELOT_EVIL' THEN 'good' ELSE team END
+    -- 1 or 2 scheduled missions (swap_mission_numbers, chosen once at deal
+    -- time -- see rooms.py) -- each one reached flips the pair again.
+    -- Toggles off the CURRENT team, not a fixed assignment keyed by role
+    -- (e.g. "LANCELOT_GOOD always becomes evil") -- a role-keyed
+    -- assignment would correctly apply the first swap but then be a no-op
+    -- on the second, since by then LANCELOT_GOOD's row is already evil;
+    -- toggling makes a second landed swap actually flip the pair back.
+    IF g.swap_mission_numbers IS NOT NULL AND g.mission_number = ANY(g.swap_mission_numbers) THEN
+        UPDATE game_players SET team = CASE team WHEN 'good' THEN 'evil' WHEN 'evil' THEN 'good' ELSE team END
             WHERE game_id = p_game_id AND role IN ('LANCELOT_GOOD', 'LANCELOT_EVIL');
-        UPDATE games SET lancelots_swapped = true WHERE id = p_game_id;
+        UPDATE games SET lancelots_swap_count = lancelots_swap_count + 1 WHERE id = p_game_id;
     END IF;
 
     SELECT COUNT(*) FILTER (WHERE result = 'success'), COUNT(*) FILTER (WHERE result = 'fail')
@@ -754,8 +792,8 @@ BEGIN
     END IF;
 
     -- Same tail as sp_cast_mission_card from here: hand off to Excalibur if
-    -- it's in play and unspent, otherwise resolve outright.
-    IF (g.settings->>'excalibur')::boolean AND g.excalibur_holder_seat IS NOT NULL AND NOT g.excalibur_used THEN
+    -- it's in play and assigned this round, otherwise resolve outright.
+    IF (g.settings->>'excalibur')::boolean AND g.excalibur_holder_seat IS NOT NULL THEN
         UPDATE games SET phase = 'excalibur_decision' WHERE id = p_game_id;
     ELSE
         SELECT COUNT(*) FILTER (WHERE NOT success AND NOT reversed) INTO fail_count
