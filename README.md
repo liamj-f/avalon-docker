@@ -1190,7 +1190,7 @@ against a real local Postgres 16 and the real backend process (not mocks):
 Worth a real `docker compose up -d` (pulling the published GHCR images) or
 `docker compose up --build` (after swapping `image:` for `build:` in
 `docker-compose.yml`) on your machine before you consider it done — the
-Dockerfiles are a standard `python:3.12-slim` + `pip install` build and a
+Dockerfiles are a standard `python:3.14-slim` + `pip install` build and a
 multi-stage Node/nginx build respectively, and everything they wrap has been
 verified directly (including a real `pip install` from PyPI into a venv),
 but the containers themselves haven't been built in this environment.

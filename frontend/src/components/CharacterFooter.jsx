@@ -71,7 +71,10 @@ export default function CharacterFooter({ room }) {
               onClick={() => setOpenKey((k) => (k === r.key ? null : r.key))}
             >
               {r.name}
-              {r.count > 1 && <span className="app-footer-role-count"> ×{r.count}</span>}
+              {/* The separating space lives outside the span: accessible-name
+                  computation trims whitespace inside child elements, which
+                  would otherwise yield "Loyal Servant of Arthur×2". */}
+              {r.count > 1 && <>{' '}<span className="app-footer-role-count">×{r.count}</span></>}
             </button>
           </React.Fragment>
         ))}
