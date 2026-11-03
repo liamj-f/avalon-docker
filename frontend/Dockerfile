@@ -9,14 +9,14 @@
 # Building natively for BUILDPLATFORM and only emulating the second,
 # Node-free nginx stage for the target sidesteps that category of bug
 # entirely, and is faster besides.
-FROM --platform=$BUILDPLATFORM node:20-alpine AS build
+FROM --platform=$BUILDPLATFORM node:26-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --no-audit --no-fund
 COPY . .
 RUN npm run build
 
-FROM nginx:1.27-alpine
+FROM nginx:1.30-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 # A template, not a static file: the base image's own entrypoint
 # (/docker-entrypoint.d/20-envsubst-on-templates.sh) runs envsubst over
